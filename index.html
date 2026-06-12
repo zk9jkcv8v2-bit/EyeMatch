@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#07070a" />
+  <title>EyeMatch — Your eyes, set in stone</title>
+  <link rel="icon" href="/brand/EM_ICON_BEIGE.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@1,400;1,500&family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div id="webgl"></div>
+
+  <video id="heroVideo" class="hero-video" autoplay muted loop playsinline hidden></video>
+
+  <div class="ambient"></div>
+  <div class="vignette"></div>
+  <div id="grain"></div>
+
+  <header class="chrome">
+    <a class="wordmark" href="#" id="wordmark" aria-label="EyeMatch">
+      <img src="/brand/EM_LOGO_BEIGE.svg" alt="EyeMatch" />
+    </a>
+    <button class="sound-toggle" id="soundToggle" aria-label="Toggle sound">
+      <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+      <span class="sound-label">SOUND</span>
+    </button>
+  </header>
+
+  <!-- ============ ACT I : LANDING ============ -->
+  <section class="act" id="act-landing">
+    <div class="copy">
+      <p class="tagline" id="landingTagline">Your eyes, <em>set in stone</em>.</p>
+      <div class="actions">
+        <button class="cta" id="beginBtn">BEGIN THE SCAN</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ACT II : SCAN ============ -->
+  <section class="act" id="act-scan">
+    <div class="viewfinder-wrap">
+      <svg class="scallop-frame" id="scallopFrame" viewBox="-110 -110 220 220" aria-hidden="true"></svg>
+      <div class="viewfinder" id="viewfinder">
+        <video id="camVideo" autoplay playsinline muted></video>
+        <div class="placeholder" id="camPlaceholder">REQUESTING CAMERA&hellip;</div>
+        <div class="scan-overlay" id="scanOverlay">
+          <div class="scan-line"></div>
+        </div>
+      </div>
+    </div>
+    <div class="copy">
+      <p class="tagline status" id="scanStatus">Come closer. Let it see you.</p>
+      <div class="actions">
+        <button class="cta" id="captureBtn">CAPTURE</button>
+        <button class="cta ghost" id="uploadBtn">UPLOAD A PHOTO</button>
+      </div>
+    </div>
+    <canvas id="captureCanvas" width="480" height="480" hidden></canvas>
+    <input type="file" id="uploadInput" accept="image/*" hidden />
+  </section>
+
+  <!-- ============ ACT III : REVEAL ============ -->
+  <section class="act" id="act-reveal">
+    <div class="copy">
+      <p class="eyebrow" id="revealEyebrow">YOUR STONE</p>
+      <p class="tagline big" id="stoneName"><em>&nbsp;</em></p>
+      <p class="sub" id="revealSub">No two irises are alike. Neither is this.</p>
+      <div class="actions">
+        <button class="cta" id="reserveBtn">RESERVE YOURS</button>
+        <button class="cta ghost" id="againBtn">SCAN AGAIN</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="wipe" id="wipe"></div>
+  <div class="cursor" id="cursor"></div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
