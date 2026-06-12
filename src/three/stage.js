@@ -41,14 +41,14 @@ export class Stage {
     this.scene.add(key);
 
     // Single orbiting specular — the "one moving highlight" from the brief.
-    this.sweep = new THREE.PointLight(0xfff4e0, 14, 9, 1.8);
+    this.sweep = new THREE.PointLight(0xfff4e0, 8, 9, 1.8);
     this.sweep.position.set(2.4, 1.4, 1.6);
     this.scene.add(this.sweep);
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.bloom = new UnrealBloomPass(
-      new THREE.Vector2(window.innerWidth, window.innerHeight), 0.32, 0.65, 0.55
+      new THREE.Vector2(window.innerWidth, window.innerHeight), 0.22, 0.6, 0.72
     );
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
@@ -69,8 +69,8 @@ export class Stage {
     // world so a ~3-unit composition fits the narrower view dimension.
     const viewH = 2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) * this.camera.position.z;
     const viewW = viewH * this.camera.aspect;
-    const fit = Math.min(viewW, viewH) / 3.05;
-    this.world.scale.setScalar(Math.min(1, Math.max(0.5, fit)));
+    const fit = Math.min(viewW, viewH) / 3.85;
+    this.world.scale.setScalar(Math.min(1, Math.max(0.45, fit)));
   }
 
   setParallax(nx, ny) {
@@ -84,9 +84,8 @@ export class Stage {
     this.parallax.lerp(this.parallaxTarget, 0.06);
     this.world.rotation.y = this.parallax.x * 0.14;
     this.world.rotation.x = this.parallax.y * 0.1;
-    if (!this.reducedMotion) {
-      this.world.position.y = Math.sin(t * 0.5) * 0.045;
-    }
+    // Composition sits slightly above center so the copy below has room.
+    this.world.position.y = 0.22 + (this.reducedMotion ? 0 : Math.sin(t * 0.5) * 0.045);
 
     const sw = t * 0.45;
     this.sweep.position.set(Math.cos(sw) * 2.6, 1.1 + Math.sin(t * 0.3) * 0.7, Math.sin(sw) * 2.6 + 0.6);

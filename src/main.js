@@ -349,6 +349,9 @@ window.__eyematch = {
     state.match = buildMatch(hexToHsl(hex));
     reveal();
   },
+  // Internals for headless/hidden-tab debugging (rAF is suspended there,
+  // so frames must be driven manually).
+  gsap, stage, iris, bracelet, ring, state,
 };
 
 /* ============ go ============ */
