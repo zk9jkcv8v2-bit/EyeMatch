@@ -267,33 +267,6 @@ body { position: relative; width: 100vw; height: 100vh; }
   color: var(--text); opacity: 0.4; max-width: 34ch;
 }
 
-/* ============ branded loader ============ */
-#loader {
-  position: fixed; inset: 0; z-index: 9500;
-  display: flex; align-items: center; justify-content: center;
-  background: var(--bg);
-  transition: opacity 0.8s ease;
-}
-#loader.gone { opacity: 0; pointer-events: none; }
-.loader-inner { display: flex; flex-direction: column; align-items: center; gap: 26px; }
-.loader-mark {
-  width: 56px; height: 56px;
-  filter: drop-shadow(0 0 14px rgba(var(--glow), 0.4));
-  animation: loaderPulse 2.4s ease-in-out infinite;
-}
-@keyframes loaderPulse {
-  0%, 100% { opacity: 0.5; transform: scale(0.96); }
-  50% { opacity: 1; transform: scale(1.04); }
-}
-.loader-bar {
-  width: 132px; height: 1px; background: rgba(255, 255, 255, 0.12);
-  overflow: hidden;
-}
-.loader-bar span {
-  display: block; height: 100%; width: 0%;
-  background: linear-gradient(90deg, transparent, var(--gold));
-}
-
 /* ============ ACT IV — reserve / checkout ============ */
 #act-reserve { justify-content: flex-end; }
 .reserve-card {

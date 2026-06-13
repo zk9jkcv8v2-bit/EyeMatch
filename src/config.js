@@ -5,17 +5,15 @@ export const config = {
   // When set, it plays full-bleed behind the landing scene.
   heroVideo: null,
 
-  // The landing ring is ALIVE — it cycles through these curated vivid gemstone
-  // palettes (one harmonious set at a time, never a chaotic rainbow). Each
-  // inner array is 5 colour "slots" the beads draw from.
+  // The landing ring slowly cycles through REAL eye colours and their natural
+  // gemstone variants — only stones you could actually be matched to. Muted
+  // and natural, never neon. Each inner array is 5 colour "slots".
   shiftPalettes: [
-    ['#2f74dd', '#4a93e6', '#7ab6f2', '#274aa8', '#1f3a82'], // sapphire / aquamarine
-    ['#19b6c4', '#3fd2dd', '#74e6ec', '#13929e', '#0e7480'], // turquoise / teal
-    ['#1fb079', '#2fcd8d', '#65e0ad', '#138a5d', '#0d6b48'], // emerald / jade
-    ['#c2a52e', '#e6c24a', '#f2d36a', '#d18f24', '#b5701a'], // citrine / amber
-    ['#d8814a', '#ec9a5e', '#f3b27f', '#c05f2a', '#9a481f'], // sunstone / carnelian
-    ['#cf3f6a', '#e8627f', '#f08fa6', '#b62747', '#8f1d38'], // rubellite / rose
-    ['#8a52d6', '#a96fe6', '#c79bf0', '#6c39b0', '#52298a'], // amethyst / violet
+    ['#a6c4d6', '#7ba3c0', '#4f7896', '#5f87a6', '#88abc6'], // blue — aquamarine / sodalite
+    ['#9fbf9a', '#74a075', '#4f7857', '#86ad84', '#5f8a66'], // green — jade / aventurine
+    ['#c2a878', '#a08049', '#7a6038', '#b0a06a', '#8a7548'], // hazel — amber / gold-green
+    ['#b08a5a', '#8a6638', '#664a2b', '#9c7a4a', '#7a5836'], // brown — citrine / tiger's eye
+    ['#b9bdc2', '#949ca3', '#6f767e', '#a7adb3', '#838b93'], // grey — moonstone / labradorite
   ],
 
   // Fallback bead palette (used if a scan ever yields nothing).

@@ -169,7 +169,6 @@ function intro() {
       duration: 1.5, ease: 'power3.out', stagger: 0.035,
     }, 0.5)
     .add(() => $('wordmark').classList.add('visible'), 1)
-    .add(() => gsap.to(bracelet.cord.material, { opacity: bracelet.cordOpacity, duration: 1.2 }), 1)
     .fromTo('#act-landing .copy > *',
       { y: 18, opacity: 0 },
       { y: 0, opacity: 1, duration: 1.1, ease: 'power3.out', stagger: 0.15 }, 1.2);
@@ -187,7 +186,6 @@ let holdTween = null;
 
 $('beginBtn').addEventListener('click', () => {
   state.spin = false;
-  gsap.to(bracelet.cord.material, { opacity: 0, duration: 0.4 });
   goTo('scan', enterScan);
 });
 
@@ -303,7 +301,6 @@ function reveal() {
     iris.mesh.scale.set(1, 1, 1);
     bracelet.setColors(match.gems);
     bracelet.gems.forEach((g) => g.scale.setScalar(0.0001));
-    bracelet.cord.material.opacity = 0;
     bracelet.group.rotation.set(0, 0, 0);
     bracelet.group.position.set(0, 0, 0);
     bracelet.group.scale.setScalar(1);
@@ -327,7 +324,6 @@ function reveal() {
         z: (i) => bracelet.gems[i].userData.baseScale,
         duration: 1.3, ease: 'back.out(1.8)', stagger: 0.05,
       }, '<+=0.5')
-      .to(bracelet.cord.material, { opacity: bracelet.cordOpacity, duration: 1.2 }, '<+=0.4')
 
       // 3 — the ring of stones tips over into jewellery
       .to(bracelet.group.rotation, { x: -1.02, duration: 1.8, ease: 'power3.inOut' }, '<+=0.6')
@@ -350,14 +346,12 @@ $('againBtn').addEventListener('click', () => {
   goTo('landing', () => {
     poseLanding();
     bracelet.gems.forEach((g) => g.scale.setScalar(0.0001));
-    bracelet.cord.material.opacity = 0;
     gsap.to(bracelet.gems.map((g) => g.scale), {
       x: (i) => bracelet.gems[i].userData.baseScale,
       y: (i) => bracelet.gems[i].userData.baseScale,
       z: (i) => bracelet.gems[i].userData.baseScale,
       duration: 1.2, ease: 'power3.out', stagger: 0.03,
     });
-    gsap.to(bracelet.cord.material, { opacity: bracelet.cordOpacity, duration: 1.2, delay: 0.6 });
     state.spin = true;
   });
 });
@@ -584,20 +578,5 @@ window.__eyematch = {
   gsap, stage, iris, bracelet, state,
 };
 
-/* ============ branded loader → go ============ */
-(function boot() {
-  const loader = $('loader');
-  const fill = $('loaderFill');
-  const start = () => {
-    intro();
-    gsap.to(loader, { opacity: 0, duration: 0.8, delay: 0.15,
-      onStart: () => loader.classList.add('gone'),
-      onComplete: () => loader.remove() });
-  };
-  if (reduced) { fill.style.width = '100%'; start(); return; }
-  gsap.to(fill, { width: '100%', duration: 1.5, ease: 'power2.inOut' });
-  Promise.all([
-    document.fonts?.ready || Promise.resolve(),
-    new Promise((r) => setTimeout(r, 1500)),
-  ]).then(start);
-})();
+/* ============ go ============ */
+intro();
