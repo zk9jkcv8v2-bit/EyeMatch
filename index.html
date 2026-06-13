@@ -29,37 +29,43 @@
     </button>
   </header>
 
-  <!-- ============ ACT I : LANDING ============ -->
+  <!-- ============ ACT I : DORMANT STONE ============ -->
   <section class="act" id="act-landing">
     <div class="copy">
-      <p class="tagline" id="landingTagline">Your eyes, <em>set in stone</em>.</p>
+      <p class="tagline">Every eye holds a <em>color</em>.</p>
       <div class="actions">
-        <button class="cta" id="beginBtn">BEGIN THE SCAN</button>
+        <button class="cta" id="beginBtn">FIND YOUR COLOR</button>
       </div>
     </div>
   </section>
 
-  <!-- ============ ACT II : SCAN ============ -->
+  <!-- ============ ACT II : THE READING (full-bleed capture) ============ -->
   <section class="act" id="act-scan">
-    <div class="viewfinder-wrap">
-      <svg class="scallop-frame" id="scallopFrame" viewBox="-110 -110 220 220" aria-hidden="true"></svg>
-      <div class="viewfinder" id="viewfinder">
-        <video id="camVideo" autoplay playsinline muted></video>
-        <div class="placeholder" id="camPlaceholder">REQUESTING CAMERA&hellip;</div>
-        <div class="scan-overlay" id="scanOverlay">
-          <div class="scan-line"></div>
-        </div>
+    <div class="cam-backdrop"></div>
+    <video id="camVideo" class="cam-feed" autoplay playsinline muted></video>
+    <div class="cam-vignette"></div>
+
+    <div class="focus" id="focus">
+      <svg class="focus-petal" id="focusPetalBg" viewBox="-110 -110 220 220" aria-hidden="true"></svg>
+      <svg class="focus-petal draw" id="focusPetalDraw" viewBox="-110 -110 220 220" aria-hidden="true"></svg>
+    </div>
+
+    <div class="cam-copy">
+      <p class="tagline status" id="scanStatus">Look into the lens.</p>
+      <p class="cam-hint" id="camHint">tap anywhere to capture</p>
+    </div>
+
+    <!-- Shown only when no camera is available -->
+    <div class="upload-fallback" id="uploadFallback" hidden>
+      <svg class="focus-petal" viewBox="-110 -110 220 220" aria-hidden="true" id="uploadPetal"></svg>
+      <div class="upload-inner">
+        <p class="tagline">Show me your <em>eye</em>.</p>
+        <button class="cta" id="browseBtn">CHOOSE A PHOTO</button>
       </div>
     </div>
-    <div class="copy">
-      <p class="tagline status" id="scanStatus">Come closer. Let it see you.</p>
-      <div class="actions">
-        <button class="cta" id="captureBtn">CAPTURE</button>
-        <button class="cta ghost" id="uploadBtn">UPLOAD A PHOTO</button>
-      </div>
-    </div>
-    <canvas id="captureCanvas" width="480" height="480" hidden></canvas>
+
     <input type="file" id="uploadInput" accept="image/*" hidden />
+    <canvas id="captureCanvas" width="480" height="480" hidden></canvas>
   </section>
 
   <!-- ============ ACT III : REVEAL ============ -->
@@ -75,6 +81,7 @@
     </div>
   </section>
 
+  <div class="flash" id="flash"></div>
   <div class="wipe" id="wipe"></div>
   <div class="cursor" id="cursor"></div>
 

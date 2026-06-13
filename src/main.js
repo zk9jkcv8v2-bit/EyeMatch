@@ -4,7 +4,6 @@ import { config, petalEdge } from './config.js';
 import { Stage } from './three/stage.js';
 import { Iris } from './three/iris.js';
 import { Bracelet } from './three/bracelet.js';
-import { BrandRing } from './three/brandring.js';
 import { Scanner, extractIrisColor, buildMatch, hexToHsl } from './scan.js';
 import { AudioEngine } from './audio.js';
 
@@ -16,16 +15,15 @@ const $ = (id) => document.getElementById(id);
 /* ============ three.js scene ============ */
 const stage = new Stage($('webgl'), { reducedMotion: reduced });
 
+// The iris lives only inside the reveal now — hidden until then.
 const iris = new Iris({ petals: config.petals });
 iris.basePupil = 0.3;
 iris.setColors(config.brandIris);
+iris.uniforms.uAlpha.value = 0;
 stage.world.add(iris.mesh);
 
-const ring = new BrandRing();
-stage.world.add(ring.mesh);
-
 const bracelet = new Bracelet({ count: config.beadCount });
-bracelet.setColors(config.brandBeads);
+bracelet.setColors(config.dormantBeads);
 stage.world.add(bracelet.group);
 
 const state = { act: 'landing', spin: false, match: null };
@@ -33,7 +31,7 @@ const state = { act: 'landing', spin: false, match: null };
 stage.onTick.push((t, dt) => {
   iris.update(t);
   bracelet.update(t, dt);
-  if (state.spin) bracelet.group.rotation.z += dt * 0.12;
+  if (state.spin) bracelet.group.rotation.z += dt * 0.1;
 });
 
 /* ============ audio ============ */
@@ -60,17 +58,27 @@ soundToggle.addEventListener('click', () => {
   $('grain').style.backgroundImage = `url(${c.toDataURL()})`;
 })();
 
-/* ============ brand-shaped viewfinder frame (8-petal star) ============ */
-(function buildScallopFrame() {
+/* ============ brand petal path (capture focus indicators) ============ */
+function petalPath(radius = 100) {
   const pts = [];
   for (let i = 0; i <= 256; i++) {
     const a = (i / 256) * Math.PI * 2;
-    const r = 100 * petalEdge(a);
+    const r = radius * petalEdge(a);
     pts.push(`${(Math.cos(a) * r).toFixed(2)},${(Math.sin(a) * r).toFixed(2)}`);
   }
-  $('scallopFrame').innerHTML =
-    `<path d="M${pts.join('L')}Z" fill="none" stroke="currentColor" stroke-width="1.4"/>`;
+  return `M${pts.join('L')}Z`;
+}
+(function buildFocusPetals() {
+  const d = petalPath(100);
+  $('focusPetalBg').innerHTML = `<path d="${d}"/>`;
+  $('focusPetalDraw').innerHTML = `<path d="${d}" pathLength="1"/>`;
+  $('uploadPetal').innerHTML = `<path d="${d}"/>`;
 })();
+const drawPath = $('focusPetalDraw').querySelector('path');
+function resetDrawPetal() {
+  gsap.set(drawPath, { strokeDasharray: 1, strokeDashoffset: 1 });
+}
+resetDrawPetal();
 
 /* ============ custom cursor (the brand icon) ============ */
 (function cursor() {
@@ -102,6 +110,7 @@ addEventListener('mousemove', (e) => {
 
 /* ============ act switching + iris wipe ============ */
 const wipe = $('wipe');
+const flash = $('flash');
 const acts = { landing: $('act-landing'), scan: $('act-scan'), reveal: $('act-reveal') };
 
 function coverWipe() {
@@ -142,96 +151,114 @@ function scramble(el, finalText, duration = 800) {
   })();
 }
 
-/* ============ ACT I — landing intro + the "two truths" tease ============ */
-let tease = null;
-
-function startTease() {
-  if (reduced) return;
-  stopTease();
-  tease = gsap.timeline({ repeat: -1, repeatDelay: 7, delay: 2.4 });
-  tease
-    .to(iris.uniforms.uDissolve, { value: 0.34, duration: 1.4, ease: 'power2.inOut' }, 0)
-    .to(iris, { basePupil: 0.2, duration: 1.4, ease: 'power2.inOut' }, 0)
-    .to(bracelet.gems.map((g) => g.scale), {
-      x: 0.55, y: 0.55, z: 0.55, duration: 1.1, ease: 'back.out(2)', stagger: 0.025,
-    }, 0.25)
-    .to(iris.uniforms.uDissolve, { value: 0, duration: 1.3, ease: 'power2.inOut' }, 2.1)
-    .to(iris, { basePupil: 0.3, duration: 1.3, ease: 'power2.inOut' }, 2.1)
-    .to(bracelet.gems.map((g) => g.scale), {
-      x: 0.0001, y: 0.0001, z: 0.0001, duration: 0.9, ease: 'power3.in', stagger: 0.018,
-    }, 2.0);
-}
-function stopTease() {
-  tease?.kill();
-  tease = null;
+/* ============ ACT I — the dormant stone ============ */
+function poseDormant() {
+  bracelet.setColors(config.dormantBeads);
+  bracelet.group.rotation.set(-1.0, 0, 0);
+  bracelet.group.position.set(0, 0, 0);
+  bracelet.group.scale.setScalar(0.9);
+  iris.uniforms.uAlpha.value = 0;
+  iris.uniforms.uDissolve.value = 0;
 }
 
 function intro() {
   acts.landing.classList.add('active');
+  poseDormant();
+  bracelet.gems.forEach((g) => g.scale.setScalar(0.0001));
+  state.spin = true;
+
   const tl = gsap.timeline();
   tl.to(wipe, { clipPath: 'circle(0% at 50% 50%)', duration: 1.4, ease: 'power2.inOut' }, 0.2)
-    .to(iris.uniforms.uAlpha, { value: 1, duration: 1.8, ease: 'power2.out' }, 0.4)
-    .to(ring.material, { opacity: 1, duration: 1.8, ease: 'power2.out' }, 0.6)
-    .fromTo(iris.mesh.scale, { x: 0.86, y: 0.86 }, { x: 1, y: 1, duration: 2, ease: 'power3.out' }, 0.4)
-    .fromTo(ring.mesh.scale, { x: 0.92, y: 0.92, z: 0.92 }, { x: 1, y: 1, z: 1, duration: 2, ease: 'power3.out' }, 0.4)
+    .to(bracelet.gems.map((g) => g.scale), {
+      x: (i) => bracelet.gems[i].userData.baseScale,
+      y: (i) => bracelet.gems[i].userData.baseScale,
+      z: (i) => bracelet.gems[i].userData.baseScale,
+      duration: 1.5, ease: 'power3.out', stagger: 0.035,
+    }, 0.5)
     .add(() => {
       $('wordmark').classList.add('visible');
       soundToggle.classList.add('visible');
     }, 1)
     .fromTo('#act-landing .copy > *',
       { y: 18, opacity: 0 },
-      { y: 0, opacity: 1, duration: 1.1, ease: 'power3.out', stagger: 0.15 }, 1.2)
-    .add(startTease, 1.6);
+      { y: 0, opacity: 1, duration: 1.1, ease: 'power3.out', stagger: 0.15 }, 1.2);
 }
 
-/* ============ ACT II — scan ============ */
+/* ============ ACT II — the reading (cinematic capture) ============ */
 const scanner = new Scanner({
   video: $('camVideo'),
-  placeholder: $('camPlaceholder'),
+  placeholder: { textContent: '', style: {} }, // unused in this design
   captureCanvas: $('captureCanvas'),
 });
 
+let captured = false;
+let holdTween = null;
+
 $('beginBtn').addEventListener('click', () => {
   audio.click();
-  stopTease();
-  gsap.to(iris.uniforms.uDissolve, { value: 0, duration: 0.3 });
-  bracelet.gems.forEach((g) => g.scale.setScalar(0.0001));
-  goTo('scan', () => {
-    gsap.to(iris.uniforms.uAlpha, { value: 0.08, duration: 0.6 });
-    gsap.to(ring.material, { opacity: 0.1, duration: 0.6 });
-    scramble($('scanStatus'), 'Come closer. Let it see you.');
-    scanner.start();
-  });
+  state.spin = false;
+  goTo('scan', enterScan);
 });
 
-let scanning = false;
+function enterScan() {
+  captured = false;
+  resetDrawPetal();
+  $('uploadFallback').hidden = true;
+  $('camHint').style.display = '';
+  $('camVideo').classList.remove('live');
+  $('act-scan').classList.remove('reading', 'show-upload');
+  scramble($('scanStatus'), 'Look into the lens.');
 
-function runMatch() {
-  if (scanning) return;
-  scanning = true;
-  $('scanOverlay').classList.add('active');
-  audio.scan(1.9);
-  scramble($('scanStatus'), 'Reading your iris…', 700);
+  scanner.start().then(() => {
+    if (state.act !== 'scan' || captured) return;
+    const fallbackUp = $('act-scan').classList.contains('show-upload');
+    if (scanner.ready && !fallbackUp) {
+      $('camVideo').classList.add('live');
+      beginHold();
+    } else if (!scanner.ready) {
+      showUploadFallback();
+    }
+  });
 
-  setTimeout(() => {
-    const hsl = extractIrisColor($('captureCanvas'));
-    state.match = buildMatch(hsl ?? { h: 210, s: 0.28, l: 0.45 });
-    scramble($('scanStatus'), `Matched: ${state.match.stone}`, 700);
-    setTimeout(() => {
-      $('scanOverlay').classList.remove('active');
-      scanning = false;
-      reveal();
-    }, 1100);
-  }, 1900);
+  // Safety: if the camera permission is never answered, offer upload anyway.
+  gsap.delayedCall(7, () => {
+    if (state.act === 'scan' && !captured && !scanner.ready) showUploadFallback();
+  });
 }
 
-$('captureBtn').addEventListener('click', () => {
-  audio.click();
-  if (scanner.captureFromVideo()) runMatch();
-  else scramble($('scanStatus'), 'Camera not ready — try uploading a photo', 700);
+function beginHold() {
+  gsap.delayedCall(1.1, () => {
+    if (captured || state.act !== 'scan' || !scanner.ready) return;
+    scramble($('scanStatus'), 'Hold still…');
+    $('camHint').textContent = 'reading automatically — or tap to capture now';
+    holdTween = gsap.fromTo(drawPath,
+      { strokeDashoffset: 1 },
+      { strokeDashoffset: 0, duration: 3.0, ease: 'none', onComplete: () => fireCapture() });
+  });
+}
+
+function fireCapture() {
+  if (captured || state.act !== 'scan') return;
+  if (!scanner.captureFromVideo()) { showUploadFallback(); return; }
+  captured = true;
+  holdTween?.kill();
+  doReading();
+}
+
+// Tap anywhere on the live feed to capture immediately.
+$('act-scan').addEventListener('click', (e) => {
+  if (e.target.closest('.cta')) return; // let buttons handle themselves
+  if (!$('uploadFallback').hidden) return; // fallback has its own button
+  if (scanner.ready) { audio.click(); fireCapture(); }
 });
 
-$('uploadBtn').addEventListener('click', () => {
+function showUploadFallback() {
+  $('camVideo').classList.remove('live');
+  $('act-scan').classList.add('show-upload');
+  $('uploadFallback').hidden = false;
+}
+
+$('browseBtn').addEventListener('click', () => {
   audio.click();
   $('uploadInput').click();
 });
@@ -242,17 +269,37 @@ $('uploadInput').addEventListener('change', (e) => {
   img.onload = () => {
     scanner.captureFromImage(img);
     URL.revokeObjectURL(img.src);
-    runMatch();
+    if (captured) return;
+    captured = true;
+    $('uploadFallback').hidden = true;
+    doReading();
   };
   img.src = URL.createObjectURL(file);
 });
+
+// The light-sweep that lifts your color out, then carries into the reveal.
+function doReading() {
+  $('act-scan').classList.add('reading');
+  scramble($('scanStatus'), 'Reading your color…', 700);
+  audio.scan(0.9);
+
+  gsap.timeline()
+    .set(flash, { opacity: 0, scale: 0.25, transformOrigin: '50% 50%' })
+    .to(flash, { opacity: 1, scale: 1.15, duration: 0.5, ease: 'power2.in' })
+    .add(() => {
+      const hsl = extractIrisColor($('captureCanvas'));
+      state.match = buildMatch(hsl ?? { h: 210, s: 0.28, l: 0.45 });
+      audio.chime();
+    })
+    .to(flash, { opacity: 0, duration: 0.55, ease: 'power2.out' }, '+=0.05')
+    .add(() => { $('act-scan').classList.remove('reading'); reveal(); });
+}
 
 /* ============ ACT III — the reveal: iris reborn → bracelet ============ */
 function reveal() {
   const match = state.match;
   goTo('reveal', () => {
-    stopTease();
-    gsap.killTweensOf([iris.uniforms.uAlpha, iris.uniforms.uDissolve, iris, ring.material, ...bracelet.gems.map((g) => g.scale)]);
+    gsap.killTweensOf([iris.uniforms.uAlpha, iris.uniforms.uDissolve, iris, ...bracelet.gems.map((g) => g.scale)]);
     scanner.stop();
 
     // Stage the scene: iris in *their* colors, beads in *their* stones, hidden.
@@ -260,8 +307,7 @@ function reveal() {
     iris.uniforms.uAlpha.value = 0;
     iris.uniforms.uDissolve.value = 0;
     iris.basePupil = 0.3;
-    ring.material.opacity = 0;
-    ring.mesh.scale.setScalar(1);
+    iris.mesh.scale.set(1, 1, 1);
     bracelet.setColors(match.gems);
     bracelet.gems.forEach((g) => g.scale.setScalar(0.0001));
     bracelet.group.rotation.set(0, 0, 0);
@@ -274,24 +320,20 @@ function reveal() {
 
     const tl = gsap.timeline({ delay: 0.3 });
 
-    // 1 — their iris re-forms out of the dark, framed by the brand ring
+    // 1 — their iris re-forms out of the dark
     tl.to(iris.uniforms.uAlpha, { value: 1, duration: 1.6, ease: 'power2.out' })
-      .to(ring.material, { opacity: 1, duration: 1.6, ease: 'power2.out' }, '<')
       .fromTo(iris.mesh.scale, { x: 0.9, y: 0.9 }, { x: 1, y: 1, duration: 1.8, ease: 'power3.out' }, '<')
 
-      // 2 — pupil contracts, fibres stream outward and set into stones
+      // 2 — pupil contracts, fibres stream outward and crystallize into stones
       .add(() => audio.chime(), '+=0.5')
       .to(iris, { basePupil: 0.05, duration: 1.2, ease: 'power3.inOut' }, '<')
       .to(iris.uniforms.uDissolve, { value: 1.45, duration: 2.0, ease: 'power2.inOut' }, '<+=0.3')
-      // the brand ring releases the stones: it brightens, then lets go
-      .to(ring.material, { opacity: 0, duration: 1.6, ease: 'power2.inOut' }, '<+=0.7')
-      .to(ring.mesh.scale, { x: 1.12, y: 1.12, z: 1.12, duration: 1.8, ease: 'power2.inOut' }, '<')
       .to(bracelet.gems.map((g) => g.scale), {
         x: (i) => bracelet.gems[i].userData.baseScale,
         y: (i) => bracelet.gems[i].userData.baseScale,
         z: (i) => bracelet.gems[i].userData.baseScale,
-        duration: 1.3, ease: 'back.out(1.8)', stagger: 0.04,
-      }, '<-=0.2')
+        duration: 1.3, ease: 'back.out(1.8)', stagger: 0.05,
+      }, '<+=0.5')
 
       // 3 — the ring of stones tips over into jewellery
       .to(bracelet.group.rotation, { x: -1.02, duration: 1.8, ease: 'power3.inOut' }, '<+=0.6')
@@ -313,20 +355,15 @@ function reveal() {
 $('againBtn').addEventListener('click', () => {
   audio.click();
   goTo('landing', () => {
-    state.spin = false;
-    iris.setColors(config.brandIris);
-    iris.uniforms.uAlpha.value = 1;
-    iris.uniforms.uDissolve.value = 0;
-    iris.basePupil = 0.3;
-    iris.mesh.scale.set(1, 1, 1);
-    ring.material.opacity = 1;
-    ring.mesh.scale.setScalar(1);
-    bracelet.setColors(config.brandBeads);
+    poseDormant();
     bracelet.gems.forEach((g) => g.scale.setScalar(0.0001));
-    bracelet.group.rotation.set(0, 0, 0);
-    bracelet.group.position.set(0, 0, 0);
-    bracelet.group.scale.setScalar(1);
-    startTease();
+    gsap.to(bracelet.gems.map((g) => g.scale), {
+      x: (i) => bracelet.gems[i].userData.baseScale,
+      y: (i) => bracelet.gems[i].userData.baseScale,
+      z: (i) => bracelet.gems[i].userData.baseScale,
+      duration: 1.2, ease: 'power3.out', stagger: 0.03,
+    });
+    state.spin = true;
   });
 });
 
@@ -351,7 +388,7 @@ window.__eyematch = {
   },
   // Internals for headless/hidden-tab debugging (rAF is suspended there,
   // so frames must be driven manually).
-  gsap, stage, iris, bracelet, ring, state,
+  gsap, stage, iris, bracelet, state,
 };
 
 /* ============ go ============ */

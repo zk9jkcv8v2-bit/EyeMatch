@@ -5,11 +5,14 @@ export const config = {
   // When set, it plays full-bleed behind the landing scene.
   heroVideo: null,
 
-  // Default bead palette for the landing bracelet tease — aquamarine /
-  // apatite / sodalite blues, matching the reference product photo.
+  // The landing bracelet is DORMANT — colorless frosted stones, waiting for
+  // an eye to wake them. Cool greys with the faintest blue, moonstone-like.
+  dormantBeads: ['#c4c6cb', '#a9acb2', '#8d9097', '#74777e', '#5b5e66'],
+
+  // Fallback bead palette (used if a scan ever yields nothing).
   brandBeads: ['#a9c6d6', '#7fa9c4', '#3e7396', '#2b4a73', '#27355e'],
 
-  // Landing iris colors (blue iris, warm amber corona near the pupil).
+  // Reveal iris colors (overwritten per-scan; warm amber corona by default).
   brandIris: { core: '#8a6b38', mid: '#5d7791', edge: '#27384c' },
 
   beadCount: 24,
