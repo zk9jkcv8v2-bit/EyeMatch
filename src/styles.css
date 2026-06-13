@@ -160,9 +160,54 @@ body { position: relative; width: 100vw; height: 100vh; }
   background: var(--bg);
 }
 
-/* When there's no camera, swap the live-capture UI for the upload prompt. */
-#act-scan.show-upload .focus,
-#act-scan.show-upload .cam-copy { display: none; }
+/* The focus guide + live controls only appear once the camera is running. */
+#act-scan:not(.live) .focus,
+#act-scan:not(.live) .cam-copy { display: none; }
+#act-scan.live .scan-intro { display: none; }
+
+/* Bigger, clearer tap targets for the capture step (all ages). */
+.cta.big { font-size: 12px; padding: 22px 54px; letter-spacing: 0.3em; }
+
+/* Front-door choice screen. */
+.scan-intro {
+  position: fixed; inset: 0; z-index: 9;
+  display: flex; align-items: center; justify-content: center;
+  text-align: center;
+}
+.scan-intro-petal {
+  position: absolute; top: 50%; left: 50%;
+  width: min(74vmin, 540px); height: min(74vmin, 540px);
+  transform: translate(-50%, -50%);
+  animation: focusRot 90s linear infinite;
+}
+.scan-intro-petal path { fill: none; stroke: rgba(243, 230, 207, 0.12); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.scan-intro-body {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 22px;
+  pointer-events: auto;
+  padding: 0 24px;
+}
+.scan-intro-body .actions { margin-top: 8px; }
+.scan-sub {
+  font-size: 15px; font-weight: 300; line-height: 1.6;
+  color: var(--text); opacity: 0.62; max-width: 30ch;
+}
+
+.cam-copy {
+  position: fixed; left: 0; right: 0; bottom: 12vh; z-index: 8;
+  display: flex; flex-direction: column; align-items: center; gap: 20px;
+  text-align: center; pointer-events: none;
+}
+.cam-copy .actions { pointer-events: auto; }
+.text-link {
+  pointer-events: auto;
+  background: none; border: none;
+  font-family: 'Manrope', sans-serif; font-size: 12px; font-weight: 400;
+  letter-spacing: 0.04em; color: var(--text); opacity: 0.5;
+  text-decoration: underline; text-underline-offset: 4px;
+  transition: opacity 0.3s ease, color 0.3s ease;
+}
+.text-link:hover { opacity: 0.95; color: var(--gold); }
 
 /* The live feed fills the whole screen, treated to feel cinematic, not webcam. */
 .cam-feed {
@@ -206,33 +251,6 @@ body { position: relative; width: 100vw; height: 100vh; }
 }
 @keyframes focusRot { to { transform: rotate(360deg); } }
 
-.cam-copy {
-  position: fixed; left: 0; right: 0; bottom: 14vh; z-index: 8;
-  display: flex; flex-direction: column; align-items: center; gap: 12px;
-  text-align: center; pointer-events: none;
-}
-.cam-hint {
-  font-size: 10px; letter-spacing: 0.34em; font-weight: 600;
-  color: var(--text); opacity: 0.4; text-transform: uppercase;
-}
-
-/* No-camera fallback. */
-.upload-fallback {
-  position: fixed; inset: 0; z-index: 8;
-  display: flex; align-items: center; justify-content: center;
-}
-.upload-fallback .focus-petal {
-  position: absolute; top: 50%; left: 50%;
-  width: min(52vmin, 360px); height: min(52vmin, 360px);
-  transform: translate(-50%, -50%);
-  animation: focusRot 80s linear infinite;
-}
-.upload-fallback .focus-petal path { stroke: rgba(243, 230, 207, 0.28); }
-.upload-inner {
-  position: relative; display: flex; flex-direction: column; align-items: center; gap: 28px;
-  pointer-events: auto;
-}
-
 /* The light-sweep flash that lifts the color out. */
 .flash {
   position: fixed; inset: 0; z-index: 8500; pointer-events: none;
@@ -272,10 +290,12 @@ body { position: relative; width: 100vw; height: 100vh; }
   .tagline { font-size: 19px; }
   .tagline.big { font-size: 30px; }
   .cta { padding: 17px 34px; letter-spacing: 0.26em; }
+  .cta.big { padding: 19px 44px; }
   .focus { width: 64vmin; height: 64vmin; }
-  .cam-copy { bottom: 11vh; }
+  .cam-copy { bottom: 9vh; }
+  .scan-sub { font-size: 14px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #grain, .focus-petal.draw, .upload-fallback .focus-petal, .cta::before { animation: none; }
+  #grain, .focus-petal.draw, .scan-intro-petal, .cta::before { animation: none; }
 }

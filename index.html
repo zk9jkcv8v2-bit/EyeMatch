@@ -39,7 +39,7 @@
     </div>
   </section>
 
-  <!-- ============ ACT II : THE READING (full-bleed capture) ============ -->
+  <!-- ============ ACT II : THE READING ============ -->
   <section class="act" id="act-scan">
     <div class="cam-backdrop"></div>
     <video id="camVideo" class="cam-feed" autoplay playsinline muted></video>
@@ -50,18 +50,27 @@
       <svg class="focus-petal draw" id="focusPetalDraw" viewBox="-110 -110 220 220" aria-hidden="true"></svg>
     </div>
 
-    <div class="cam-copy">
-      <p class="tagline status" id="scanStatus">Look into the lens.</p>
-      <p class="cam-hint" id="camHint">tap anywhere to capture</p>
+    <!-- Front door: a clear choice, no surprise permission prompt -->
+    <div class="scan-intro" id="scanIntro">
+      <svg class="scan-intro-petal" viewBox="-110 -110 220 220" aria-hidden="true" id="introPetal"></svg>
+      <div class="scan-intro-body">
+        <p class="eyebrow">STEP 2 OF 2</p>
+        <p class="tagline">Let's find your <em>color</em>.</p>
+        <p class="scan-sub" id="scanIntroSub">Take a quick photo of your eye — or upload one you already have.</p>
+        <div class="actions">
+          <button class="cta big" id="useCameraBtn">USE MY CAMERA</button>
+          <button class="cta ghost" id="useUploadBtn">UPLOAD A PHOTO</button>
+        </div>
+      </div>
     </div>
 
-    <!-- Shown only when no camera is available -->
-    <div class="upload-fallback" id="uploadFallback" hidden>
-      <svg class="focus-petal" viewBox="-110 -110 220 220" aria-hidden="true" id="uploadPetal"></svg>
-      <div class="upload-inner">
-        <p class="tagline">Show me your <em>eye</em>.</p>
-        <button class="cta" id="browseBtn">CHOOSE A PHOTO</button>
+    <!-- Live capture controls -->
+    <div class="cam-copy" id="camControls" hidden>
+      <p class="tagline status" id="scanStatus">Center your eye, then capture.</p>
+      <div class="actions">
+        <button class="cta big" id="captureBtn">CAPTURE</button>
       </div>
+      <button class="text-link" id="switchUploadBtn">or upload a photo instead</button>
     </div>
 
     <input type="file" id="uploadInput" accept="image/*" hidden />

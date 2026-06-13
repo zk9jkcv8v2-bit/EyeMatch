@@ -5,9 +5,18 @@ export const config = {
   // When set, it plays full-bleed behind the landing scene.
   heroVideo: null,
 
-  // The landing bracelet is DORMANT — colorless frosted stones, waiting for
-  // an eye to wake them. Cool greys with the faintest blue, moonstone-like.
-  dormantBeads: ['#c4c6cb', '#a9acb2', '#8d9097', '#74777e', '#5b5e66'],
+  // The landing ring is ALIVE — it cycles through these curated vivid gemstone
+  // palettes (one harmonious set at a time, never a chaotic rainbow). Each
+  // inner array is 5 colour "slots" the beads draw from.
+  shiftPalettes: [
+    ['#2f74dd', '#4a93e6', '#7ab6f2', '#274aa8', '#1f3a82'], // sapphire / aquamarine
+    ['#19b6c4', '#3fd2dd', '#74e6ec', '#13929e', '#0e7480'], // turquoise / teal
+    ['#1fb079', '#2fcd8d', '#65e0ad', '#138a5d', '#0d6b48'], // emerald / jade
+    ['#c2a52e', '#e6c24a', '#f2d36a', '#d18f24', '#b5701a'], // citrine / amber
+    ['#d8814a', '#ec9a5e', '#f3b27f', '#c05f2a', '#9a481f'], // sunstone / carnelian
+    ['#cf3f6a', '#e8627f', '#f08fa6', '#b62747', '#8f1d38'], // rubellite / rose
+    ['#8a52d6', '#a96fe6', '#c79bf0', '#6c39b0', '#52298a'], // amethyst / violet
+  ],
 
   // Fallback bead palette (used if a scan ever yields nothing).
   brandBeads: ['#a9c6d6', '#7fa9c4', '#3e7396', '#2b4a73', '#27355e'],

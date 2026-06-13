@@ -22,15 +22,15 @@ iris.setColors(config.brandIris);
 iris.uniforms.uAlpha.value = 0;
 stage.world.add(iris.mesh);
 
-const bracelet = new Bracelet({ count: config.beadCount });
-bracelet.setColors(config.dormantBeads);
+const bracelet = new Bracelet({ count: config.beadCount, shiftPalettes: config.shiftPalettes });
+bracelet.startColorShift();
 stage.world.add(bracelet.group);
 
 const state = { act: 'landing', spin: false, match: null };
 
 stage.onTick.push((t, dt) => {
   iris.update(t);
-  bracelet.update(t, dt);
+  bracelet.update(t);
   if (state.spin) bracelet.group.rotation.z += dt * 0.1;
 });
 
@@ -72,7 +72,7 @@ function petalPath(radius = 100) {
   const d = petalPath(100);
   $('focusPetalBg').innerHTML = `<path d="${d}"/>`;
   $('focusPetalDraw').innerHTML = `<path d="${d}" pathLength="1"/>`;
-  $('uploadPetal').innerHTML = `<path d="${d}"/>`;
+  $('introPetal').innerHTML = `<path d="${d}"/>`;
 })();
 const drawPath = $('focusPetalDraw').querySelector('path');
 function resetDrawPetal() {
@@ -151,9 +151,9 @@ function scramble(el, finalText, duration = 800) {
   })();
 }
 
-/* ============ ACT I — the dormant stone ============ */
-function poseDormant() {
-  bracelet.setColors(config.dormantBeads);
+/* ============ ACT I — the living stone ============ */
+function poseLanding() {
+  bracelet.startColorShift(); // cycles vivid gemstone palettes
   bracelet.group.rotation.set(-1.0, 0, 0);
   bracelet.group.position.set(0, 0, 0);
   bracelet.group.scale.setScalar(0.9);
@@ -163,7 +163,7 @@ function poseDormant() {
 
 function intro() {
   acts.landing.classList.add('active');
-  poseDormant();
+  poseLanding();
   bracelet.gems.forEach((g) => g.scale.setScalar(0.0001));
   state.spin = true;
 
@@ -200,78 +200,83 @@ $('beginBtn').addEventListener('click', () => {
   goTo('scan', enterScan);
 });
 
+// Reset to the front-door choice screen (camera vs upload).
 function enterScan() {
   captured = false;
   resetDrawPetal();
-  $('uploadFallback').hidden = true;
-  $('camHint').style.display = '';
   $('camVideo').classList.remove('live');
-  $('act-scan').classList.remove('reading', 'show-upload');
-  scramble($('scanStatus'), 'Look into the lens.');
-
-  scanner.start().then(() => {
-    if (state.act !== 'scan' || captured) return;
-    const fallbackUp = $('act-scan').classList.contains('show-upload');
-    if (scanner.ready && !fallbackUp) {
-      $('camVideo').classList.add('live');
-      beginHold();
-    } else if (!scanner.ready) {
-      showUploadFallback();
-    }
-  });
-
-  // Safety: if the camera permission is never answered, offer upload anyway.
-  gsap.delayedCall(7, () => {
-    if (state.act === 'scan' && !captured && !scanner.ready) showUploadFallback();
-  });
+  $('act-scan').classList.remove('reading', 'live');
+  $('scanIntro').hidden = false;
+  $('camControls').hidden = true;
+  $('scanIntroSub').textContent =
+    'Take a quick photo of your eye — or upload one you already have.';
 }
 
-function beginHold() {
-  gsap.delayedCall(1.1, () => {
-    if (captured || state.act !== 'scan' || !scanner.ready) return;
-    scramble($('scanStatus'), 'Hold still…');
-    $('camHint').textContent = 'reading automatically — or tap to capture now';
-    holdTween = gsap.fromTo(drawPath,
-      { strokeDashoffset: 1 },
-      { strokeDashoffset: 0, duration: 3.0, ease: 'none', onComplete: () => fireCapture() });
+// --- Choice: use the camera ---
+$('useCameraBtn').addEventListener('click', () => {
+  audio.click();
+  $('scanIntroSub').textContent = 'Starting your camera…';
+  scanner.start().then(() => {
+    if (state.act !== 'scan' || captured) return;
+    if (scanner.ready) goLive();
+    else cameraUnavailable();
   });
+  // If the permission is never answered, nudge toward upload.
+  gsap.delayedCall(8, () => {
+    if (state.act === 'scan' && !captured && !scanner.ready) cameraUnavailable();
+  });
+});
+
+function goLive() {
+  $('scanIntro').hidden = true;
+  $('camControls').hidden = false;
+  $('camVideo').classList.add('live');
+  $('act-scan').classList.add('live');
+  scramble($('scanStatus'), 'Center your eye, then capture.');
+  // Gentle auto-assist: the petal draws itself; if they never press, we
+  // capture for them. Pressing CAPTURE (or tapping) fires immediately.
+  resetDrawPetal();
+  holdTween = gsap.fromTo(drawPath,
+    { strokeDashoffset: 1 },
+    { strokeDashoffset: 0, duration: 5.0, ease: 'none', delay: 1.2, onComplete: () => fireCapture() });
+}
+
+function cameraUnavailable() {
+  $('scanIntroSub').textContent =
+    "We couldn't reach your camera — no problem, just upload a photo of your eye.";
 }
 
 function fireCapture() {
-  if (captured || state.act !== 'scan') return;
-  if (!scanner.captureFromVideo()) { showUploadFallback(); return; }
+  if (captured || state.act !== 'scan' || !scanner.ready) return;
+  if (!scanner.captureFromVideo()) return;
   captured = true;
   holdTween?.kill();
   doReading();
 }
 
-// Tap anywhere on the live feed to capture immediately.
-$('act-scan').addEventListener('click', (e) => {
-  if (e.target.closest('.cta')) return; // let buttons handle themselves
-  if (!$('uploadFallback').hidden) return; // fallback has its own button
-  if (scanner.ready) { audio.click(); fireCapture(); }
+$('captureBtn').addEventListener('click', () => { audio.click(); fireCapture(); });
+// Tapping the live feed also captures — a forgiving, obvious target.
+$('camVideo').addEventListener('click', () => {
+  if ($('act-scan').classList.contains('live')) { audio.click(); fireCapture(); }
 });
 
-function showUploadFallback() {
-  $('camVideo').classList.remove('live');
-  $('act-scan').classList.add('show-upload');
-  $('uploadFallback').hidden = false;
-}
+// --- Choice: upload a photo (from either screen) ---
+const openUpload = () => { audio.click(); $('uploadInput').click(); };
+$('useUploadBtn').addEventListener('click', openUpload);
+$('switchUploadBtn').addEventListener('click', openUpload);
 
-$('browseBtn').addEventListener('click', () => {
-  audio.click();
-  $('uploadInput').click();
-});
 $('uploadInput').addEventListener('change', (e) => {
   const file = e.target.files[0];
-  if (!file) return;
+  if (!file || captured) return;
   const img = new Image();
   img.onload = () => {
     scanner.captureFromImage(img);
     URL.revokeObjectURL(img.src);
     if (captured) return;
     captured = true;
-    $('uploadFallback').hidden = true;
+    holdTween?.kill();
+    $('scanIntro').hidden = true;
+    $('camControls').hidden = true;
     doReading();
   };
   img.src = URL.createObjectURL(file);
@@ -355,7 +360,7 @@ function reveal() {
 $('againBtn').addEventListener('click', () => {
   audio.click();
   goTo('landing', () => {
-    poseDormant();
+    poseLanding();
     bracelet.gems.forEach((g) => g.scale.setScalar(0.0001));
     gsap.to(bracelet.gems.map((g) => g.scale), {
       x: (i) => bracelet.gems[i].userData.baseScale,
