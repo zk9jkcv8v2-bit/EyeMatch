@@ -5,7 +5,6 @@ import { Stage } from './three/stage.js';
 import { Iris } from './three/iris.js';
 import { Bracelet } from './three/bracelet.js';
 import { Scanner, extractIrisColor, buildMatch, hexToHsl } from './scan.js';
-import { AudioEngine } from './audio.js';
 
 const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 if (reduced) gsap.globalTimeline.timeScale(6);
@@ -32,14 +31,6 @@ stage.onTick.push((t, dt) => {
   iris.update(t);
   bracelet.update(t);
   if (state.spin) bracelet.group.rotation.z += dt * 0.1;
-});
-
-/* ============ audio ============ */
-const audio = new AudioEngine();
-const soundToggle = $('soundToggle');
-soundToggle.addEventListener('click', () => {
-  const on = audio.toggle();
-  soundToggle.classList.toggle('on', on);
 });
 
 /* ============ atmosphere: grain tile ============ */
@@ -94,7 +85,7 @@ resetDrawPetal();
     el.style.transform = `translate(${cx}px, ${cy}px) translate(-50%,-50%)`;
     requestAnimationFrame(loop);
   })();
-  document.querySelectorAll('.cta, .wordmark, .sound-toggle').forEach((n) => {
+  document.querySelectorAll('.cta, .wordmark, .text-link').forEach((n) => {
     n.addEventListener('mouseenter', () => el.classList.add('active'));
     n.addEventListener('mouseleave', () => el.classList.remove('active'));
   });
@@ -125,7 +116,6 @@ function uncoverWipe() {
 }
 
 async function goTo(act, setup) {
-  audio.whoosh();
   await coverWipe();
   acts[state.act].classList.remove('active');
   acts[act].classList.add('active');
@@ -175,10 +165,8 @@ function intro() {
       z: (i) => bracelet.gems[i].userData.baseScale,
       duration: 1.5, ease: 'power3.out', stagger: 0.035,
     }, 0.5)
-    .add(() => {
-      $('wordmark').classList.add('visible');
-      soundToggle.classList.add('visible');
-    }, 1)
+    .add(() => $('wordmark').classList.add('visible'), 1)
+    .add(() => gsap.to(bracelet.cord.material, { opacity: bracelet.cordOpacity, duration: 1.2 }), 1)
     .fromTo('#act-landing .copy > *',
       { y: 18, opacity: 0 },
       { y: 0, opacity: 1, duration: 1.1, ease: 'power3.out', stagger: 0.15 }, 1.2);
@@ -195,8 +183,8 @@ let captured = false;
 let holdTween = null;
 
 $('beginBtn').addEventListener('click', () => {
-  audio.click();
   state.spin = false;
+  gsap.to(bracelet.cord.material, { opacity: 0, duration: 0.4 });
   goTo('scan', enterScan);
 });
 
@@ -214,7 +202,6 @@ function enterScan() {
 
 // --- Choice: use the camera ---
 $('useCameraBtn').addEventListener('click', () => {
-  audio.click();
   $('scanIntroSub').textContent = 'Starting your camera…';
   scanner.start().then(() => {
     if (state.act !== 'scan' || captured) return;
@@ -254,14 +241,14 @@ function fireCapture() {
   doReading();
 }
 
-$('captureBtn').addEventListener('click', () => { audio.click(); fireCapture(); });
+$('captureBtn').addEventListener('click', () => fireCapture());
 // Tapping the live feed also captures — a forgiving, obvious target.
 $('camVideo').addEventListener('click', () => {
-  if ($('act-scan').classList.contains('live')) { audio.click(); fireCapture(); }
+  if ($('act-scan').classList.contains('live')) fireCapture();
 });
 
 // --- Choice: upload a photo (from either screen) ---
-const openUpload = () => { audio.click(); $('uploadInput').click(); };
+const openUpload = () => $('uploadInput').click();
 $('useUploadBtn').addEventListener('click', openUpload);
 $('switchUploadBtn').addEventListener('click', openUpload);
 
@@ -286,7 +273,6 @@ $('uploadInput').addEventListener('change', (e) => {
 function doReading() {
   $('act-scan').classList.add('reading');
   scramble($('scanStatus'), 'Reading your color…', 700);
-  audio.scan(0.9);
 
   gsap.timeline()
     .set(flash, { opacity: 0, scale: 0.25, transformOrigin: '50% 50%' })
@@ -294,7 +280,6 @@ function doReading() {
     .add(() => {
       const hsl = extractIrisColor($('captureCanvas'));
       state.match = buildMatch(hsl ?? { h: 210, s: 0.28, l: 0.45 });
-      audio.chime();
     })
     .to(flash, { opacity: 0, duration: 0.55, ease: 'power2.out' }, '+=0.05')
     .add(() => { $('act-scan').classList.remove('reading'); reveal(); });
@@ -315,6 +300,7 @@ function reveal() {
     iris.mesh.scale.set(1, 1, 1);
     bracelet.setColors(match.gems);
     bracelet.gems.forEach((g) => g.scale.setScalar(0.0001));
+    bracelet.cord.material.opacity = 0;
     bracelet.group.rotation.set(0, 0, 0);
     bracelet.group.position.set(0, 0, 0);
     bracelet.group.scale.setScalar(1);
@@ -330,8 +316,7 @@ function reveal() {
       .fromTo(iris.mesh.scale, { x: 0.9, y: 0.9 }, { x: 1, y: 1, duration: 1.8, ease: 'power3.out' }, '<')
 
       // 2 — pupil contracts, fibres stream outward and crystallize into stones
-      .add(() => audio.chime(), '+=0.5')
-      .to(iris, { basePupil: 0.05, duration: 1.2, ease: 'power3.inOut' }, '<')
+      .to(iris, { basePupil: 0.05, duration: 1.2, ease: 'power3.inOut' }, '+=0.5')
       .to(iris.uniforms.uDissolve, { value: 1.45, duration: 2.0, ease: 'power2.inOut' }, '<+=0.3')
       .to(bracelet.gems.map((g) => g.scale), {
         x: (i) => bracelet.gems[i].userData.baseScale,
@@ -339,6 +324,7 @@ function reveal() {
         z: (i) => bracelet.gems[i].userData.baseScale,
         duration: 1.3, ease: 'back.out(1.8)', stagger: 0.05,
       }, '<+=0.5')
+      .to(bracelet.cord.material, { opacity: bracelet.cordOpacity, duration: 1.2 }, '<+=0.4')
 
       // 3 — the ring of stones tips over into jewellery
       .to(bracelet.group.rotation, { x: -1.02, duration: 1.8, ease: 'power3.inOut' }, '<+=0.6')
@@ -358,22 +344,22 @@ function reveal() {
 }
 
 $('againBtn').addEventListener('click', () => {
-  audio.click();
   goTo('landing', () => {
     poseLanding();
     bracelet.gems.forEach((g) => g.scale.setScalar(0.0001));
+    bracelet.cord.material.opacity = 0;
     gsap.to(bracelet.gems.map((g) => g.scale), {
       x: (i) => bracelet.gems[i].userData.baseScale,
       y: (i) => bracelet.gems[i].userData.baseScale,
       z: (i) => bracelet.gems[i].userData.baseScale,
       duration: 1.2, ease: 'power3.out', stagger: 0.03,
     });
+    gsap.to(bracelet.cord.material, { opacity: bracelet.cordOpacity, duration: 1.2, delay: 0.6 });
     state.spin = true;
   });
 });
 
 $('reserveBtn').addEventListener('click', (e) => {
-  audio.click();
   scramble(e.currentTarget, 'COMING SOON', 600);
   setTimeout(() => scramble(e.currentTarget, 'RESERVE YOURS', 600), 2200);
 });
