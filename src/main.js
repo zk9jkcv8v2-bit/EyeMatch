@@ -102,7 +102,10 @@ addEventListener('mousemove', (e) => {
 /* ============ act switching + iris wipe ============ */
 const wipe = $('wipe');
 const flash = $('flash');
-const acts = { landing: $('act-landing'), scan: $('act-scan'), reveal: $('act-reveal') };
+const acts = {
+  landing: $('act-landing'), scan: $('act-scan'),
+  reveal: $('act-reveal'), reserve: $('act-reserve'),
+};
 
 function coverWipe() {
   return gsap.fromTo(wipe,
@@ -359,10 +362,209 @@ $('againBtn').addEventListener('click', () => {
   });
 });
 
-$('reserveBtn').addEventListener('click', (e) => {
-  scramble(e.currentTarget, 'COMING SOON', 600);
-  setTimeout(() => scramble(e.currentTarget, 'RESERVE YOURS', 600), 2200);
+/* ============ ACT IV — reserve / checkout ============ */
+const sizeState = { size: 'M' };
+
+function swatchGradient(c) {
+  return `radial-gradient(circle at 34% 28%, rgba(255,255,255,0.6), ${c} 42%, ${c} 70%, rgba(0,0,0,0.35) 100%)`;
+}
+
+$('reserveBtn').addEventListener('click', () => {
+  if (!state.match) return;
+  goTo('reserve', () => {
+    const m = state.match;
+    $('reserveStoneName').textContent = m.stone;
+
+    const row = $('reserveBeads');
+    row.innerHTML = '';
+    m.gems.forEach((c) => {
+      const s = document.createElement('span');
+      s.style.background = swatchGradient(c);
+      row.appendChild(s);
+    });
+
+    refreshCheckoutUI();
+    gsap.fromTo('#act-reserve .reserve-card > *',
+      { y: 16, opacity: 0 },
+      { y: 0, opacity: 1, duration: 0.8, ease: 'power3.out', stagger: 0.07 });
+  });
 });
+
+$('sizeOptions').addEventListener('click', (e) => {
+  const btn = e.target.closest('.opt');
+  if (!btn) return;
+  document.querySelectorAll('#sizeOptions .opt').forEach((o) => o.classList.remove('active'));
+  btn.classList.add('active');
+  sizeState.size = btn.dataset.size;
+  refreshCheckoutUI();
+});
+
+function refreshCheckoutUI() {
+  const { currency, price, paymentLinks } = config.checkout;
+  $('priceVal').textContent = `${currency}${price}`;
+  const hasLink = !!paymentLinks[sizeState.size];
+  const form = $('reserveForm');
+  const btn = $('checkoutBtn');
+  if (hasLink) {
+    form.classList.add('checkout-mode');
+    btn.textContent = `CHECKOUT · ${currency}${price}`;
+    $('reserveNote').textContent = 'Secure checkout via Stripe. Your eye photo is never stored.';
+  } else {
+    form.classList.remove('checkout-mode');
+    btn.textContent = 'RESERVE YOURS';
+    $('reserveNote').textContent = "Join the list — we'll email you the moment it's ready.";
+  }
+}
+
+$('reserveForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const { paymentLinks, reserveEndpoint } = config.checkout;
+  const link = paymentLinks[sizeState.size];
+
+  // Real checkout path — hand off to Stripe (it collects payment + email).
+  if (link) {
+    window.location.href = link;
+    return;
+  }
+
+  // Email-reservation fallback (no backend required).
+  const email = $('emailInput').value.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    $('emailInput').focus();
+    $('reserveNote').textContent = 'Please enter a valid email.';
+    return;
+  }
+  const reservation = {
+    email, stone: state.match.stone, size: sizeState.size,
+    colors: state.match.gems, at: new Date().toISOString(),
+  };
+  try {
+    if (reserveEndpoint) {
+      await fetch(reserveEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reservation),
+      });
+    } else {
+      const list = JSON.parse(localStorage.getItem('eyematch_reservations') || '[]');
+      list.push(reservation);
+      localStorage.setItem('eyematch_reservations', JSON.stringify(list));
+    }
+    $('checkoutBtn').textContent = 'YOU’RE ON THE LIST ✦';
+    $('reserveNote').textContent = `We'll reach out at ${email}.`;
+  } catch {
+    $('reserveNote').textContent = 'Something went wrong — please try again.';
+  }
+});
+
+$('reserveBackBtn').addEventListener('click', () => goTo('reveal'));
+
+/* ============ shareable result card ============ */
+const shareSheet = $('shareSheet');
+
+function drawShareCard() {
+  const m = state.match;
+  const c = $('shareCanvas');
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+
+  // Background.
+  ctx.fillStyle = '#07070a';
+  ctx.fillRect(0, 0, W, H);
+  const bg = ctx.createRadialGradient(W / 2, H * 0.42, 60, W / 2, H * 0.42, W * 0.8);
+  bg.addColorStop(0, 'rgba(222,182,128,0.12)');
+  bg.addColorStop(1, 'rgba(7,7,10,0)');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Ring of stones.
+  const cx = W / 2, cy = H * 0.4, R = W * 0.26;
+  const n = 22;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 - Math.PI / 2;
+    const x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R;
+    const col = m.gems[(i * 7 + Math.floor(i / 5)) % m.gems.length];
+    const br = W * 0.046;
+    const g = ctx.createRadialGradient(x - br * 0.3, y - br * 0.4, br * 0.1, x, y, br);
+    g.addColorStop(0, 'rgba(255,255,255,0.75)');
+    g.addColorStop(0.4, col);
+    g.addColorStop(1, shade(col, -60));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, br, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Eyebrow.
+  ctx.fillStyle = 'rgba(216,211,218,0.55)';
+  ctx.font = '600 26px Manrope, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.letterSpacing = '12px';
+  ctx.fillText('MY STONE IS', cx, H * 0.72);
+
+  // Stone name.
+  ctx.fillStyle = '#f3e6cf';
+  ctx.font = 'italic 500 116px Fraunces, serif';
+  ctx.letterSpacing = '0px';
+  ctx.shadowColor = 'rgba(222,182,128,0.5)';
+  ctx.shadowBlur = 50;
+  ctx.fillText(m.stone, cx, H * 0.80);
+  ctx.shadowBlur = 0;
+
+  // Tagline + wordmark.
+  ctx.fillStyle = 'rgba(216,211,218,0.5)';
+  ctx.font = '300 30px Manrope, sans-serif';
+  ctx.fillText('No two irises are alike. Neither is this.', cx, H * 0.86);
+
+  ctx.fillStyle = 'rgba(226,212,189,0.85)';
+  ctx.font = '600 30px Manrope, sans-serif';
+  ctx.letterSpacing = '10px';
+  ctx.fillText('EYEMATCH', cx, H * 0.93);
+}
+
+function openShare() {
+  if (!state.match) return;
+  // Fonts may need a beat on first use.
+  (document.fonts?.ready || Promise.resolve()).then(() => {
+    drawShareCard();
+    shareSheet.hidden = false;
+    $('shareNativeBtn').hidden = !navigator.canShare;
+  });
+}
+
+$('shareBtn').addEventListener('click', openShare);
+$('shareCloseBtn').addEventListener('click', () => { shareSheet.hidden = true; });
+shareSheet.addEventListener('click', (e) => { if (e.target === shareSheet) shareSheet.hidden = true; });
+
+$('shareDownloadBtn').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.download = `eyematch-${(state.match?.stone || 'stone').toLowerCase().replace(/\s+/g, '-')}.png`;
+  a.href = $('shareCanvas').toDataURL('image/png');
+  a.click();
+});
+
+$('shareNativeBtn').addEventListener('click', async () => {
+  $('shareCanvas').toBlob(async (blob) => {
+    const file = new File([blob], 'eyematch.png', { type: 'image/png' });
+    try {
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'EyeMatch',
+          text: `My stone is ${state.match.stone}. Find yours.`,
+        });
+      }
+    } catch { /* user cancelled */ }
+  });
+});
+
+function shade(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.max(0, Math.min(255, (n >> 16) + amt));
+  const g = Math.max(0, Math.min(255, ((n >> 8) & 255) + amt));
+  const b = Math.max(0, Math.min(255, (n & 255) + amt));
+  return `rgb(${r},${g},${b})`;
+}
 
 /* ============ optional Higgsfield hero video (config.heroVideo) ============ */
 if (config.heroVideo) {
@@ -382,5 +584,20 @@ window.__eyematch = {
   gsap, stage, iris, bracelet, state,
 };
 
-/* ============ go ============ */
-intro();
+/* ============ branded loader → go ============ */
+(function boot() {
+  const loader = $('loader');
+  const fill = $('loaderFill');
+  const start = () => {
+    intro();
+    gsap.to(loader, { opacity: 0, duration: 0.8, delay: 0.15,
+      onStart: () => loader.classList.add('gone'),
+      onComplete: () => loader.remove() });
+  };
+  if (reduced) { fill.style.width = '100%'; start(); return; }
+  gsap.to(fill, { width: '100%', duration: 1.5, ease: 'power2.inOut' });
+  Promise.all([
+    document.fonts?.ready || Promise.resolve(),
+    new Promise((r) => setTimeout(r, 1500)),
+  ]).then(start);
+})();

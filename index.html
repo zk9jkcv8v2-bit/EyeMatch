@@ -2,9 +2,21 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#07070a" />
   <title>EyeMatch — Your eyes, set in stone</title>
+  <meta name="description" content="Scan your eye and discover the gemstone bracelet that matches your iris. No two eyes are alike — neither is your stone." />
+
+  <!-- Open Graph / social -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="EyeMatch — Your eyes, set in stone" />
+  <meta property="og:description" content="Scan your eye and discover the gemstone bracelet that matches your iris." />
+  <meta property="og:image" content="/brand/og-image.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="EyeMatch — Your eyes, set in stone" />
+  <meta name="twitter:description" content="Scan your eye and discover the gemstone bracelet that matches your iris." />
+  <meta name="twitter:image" content="/brand/og-image.png" />
+
   <link rel="icon" href="/brand/EM_ICON_BEIGE.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -57,6 +69,7 @@
           <button class="cta big" id="useCameraBtn">USE MY CAMERA</button>
           <button class="cta ghost" id="useUploadBtn">UPLOAD A PHOTO</button>
         </div>
+        <p class="privacy-note">Your photo stays on your device. We read its color and never store it.</p>
       </div>
     </div>
 
@@ -81,10 +94,61 @@
       <p class="sub" id="revealSub">No two irises are alike. Neither is this.</p>
       <div class="actions">
         <button class="cta" id="reserveBtn">RESERVE YOURS</button>
+        <button class="cta ghost" id="shareBtn">SHARE</button>
         <button class="cta ghost" id="againBtn">SCAN AGAIN</button>
       </div>
     </div>
   </section>
+
+  <!-- ============ ACT IV : RESERVE / CHECKOUT ============ -->
+  <section class="act" id="act-reserve">
+    <div class="reserve-card">
+      <p class="eyebrow">YOUR EYEMATCH BRACELET</p>
+      <p class="reserve-stone"><em id="reserveStoneName">Aquamarine</em></p>
+      <div class="bead-row" id="reserveBeads"></div>
+
+      <div class="control-group">
+        <p class="control-label">WRIST SIZE</p>
+        <div class="opt-row" id="sizeOptions">
+          <button class="opt" data-size="S">S</button>
+          <button class="opt active" data-size="M">M</button>
+          <button class="opt" data-size="L">L</button>
+        </div>
+        <p class="hint">Wrap a strip of paper around your wrist and measure it.<br />S ≈ 14–15cm · M ≈ 15–17cm · L ≈ 17–19cm. Unsure? M fits most.</p>
+      </div>
+
+      <p class="price"><span id="priceVal">$49</span></p>
+
+      <form class="reserve-form" id="reserveForm" novalidate>
+        <input type="email" id="emailInput" inputmode="email" autocomplete="email"
+               placeholder="Email for your reservation" />
+        <button class="cta big" id="checkoutBtn" type="submit">CHECKOUT</button>
+      </form>
+      <p class="reserve-note" id="reserveNote">Secure checkout. Your eye photo is never stored.</p>
+
+      <button class="text-link" id="reserveBackBtn">← back to your stone</button>
+    </div>
+  </section>
+
+  <!-- Shareable result card (rendered to canvas, offered as image) -->
+  <div class="share-sheet" id="shareSheet" hidden>
+    <div class="share-sheet-inner">
+      <canvas id="shareCanvas" width="1080" height="1350"></canvas>
+      <div class="share-actions">
+        <button class="cta big" id="shareDownloadBtn">SAVE IMAGE</button>
+        <button class="cta ghost" id="shareNativeBtn" hidden>SHARE…</button>
+        <button class="text-link" id="shareCloseBtn">close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Branded loader -->
+  <div id="loader">
+    <div class="loader-inner">
+      <img src="/brand/EM_ICON_BEIGE.svg" class="loader-mark" alt="" />
+      <div class="loader-bar"><span id="loaderFill"></span></div>
+    </div>
+  </div>
 
   <div class="flash" id="flash"></div>
   <div class="wipe" id="wipe"></div>

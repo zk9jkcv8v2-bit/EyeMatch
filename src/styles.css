@@ -8,6 +8,9 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* The hidden attribute must always win over display rules below. */
+[hidden] { display: none !important; }
+
 html, body {
   height: 100%;
   background: var(--bg);
@@ -257,6 +260,99 @@ body { position: relative; width: 100vw; height: 100vh; }
 .cursor.active { width: 52px; height: 52px; }
 @media (pointer: coarse) { .cursor { display: none; } }
 
+/* ---------- privacy microcopy ---------- */
+.privacy-note {
+  margin-top: 6px;
+  font-size: 11px; font-weight: 300; letter-spacing: 0.02em;
+  color: var(--text); opacity: 0.4; max-width: 34ch;
+}
+
+/* ============ branded loader ============ */
+#loader {
+  position: fixed; inset: 0; z-index: 9500;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg);
+  transition: opacity 0.8s ease;
+}
+#loader.gone { opacity: 0; pointer-events: none; }
+.loader-inner { display: flex; flex-direction: column; align-items: center; gap: 26px; }
+.loader-mark {
+  width: 56px; height: 56px;
+  filter: drop-shadow(0 0 14px rgba(var(--glow), 0.4));
+  animation: loaderPulse 2.4s ease-in-out infinite;
+}
+@keyframes loaderPulse {
+  0%, 100% { opacity: 0.5; transform: scale(0.96); }
+  50% { opacity: 1; transform: scale(1.04); }
+}
+.loader-bar {
+  width: 132px; height: 1px; background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.loader-bar span {
+  display: block; height: 100%; width: 0%;
+  background: linear-gradient(90deg, transparent, var(--gold));
+}
+
+/* ============ ACT IV — reserve / checkout ============ */
+#act-reserve { justify-content: flex-end; }
+.reserve-card {
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  text-align: center; pointer-events: auto;
+  width: min(92vw, 420px);
+  padding-bottom: 6vh;
+}
+.reserve-stone {
+  font-family: 'Fraunces', serif; font-style: italic; font-weight: 500;
+  font-size: 34px; color: var(--gold);
+  text-shadow: 0 0 30px rgba(var(--glow), 0.3);
+}
+.bead-row { display: flex; gap: 7px; }
+.bead-row span {
+  width: 20px; height: 20px; border-radius: 50%;
+  box-shadow: inset -3px -4px 7px rgba(0,0,0,0.5), inset 3px 3px 6px rgba(255,255,255,0.22), 0 3px 8px rgba(0,0,0,0.5);
+}
+.control-group { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-top: 4px; }
+.control-label { font-size: 10px; letter-spacing: 0.34em; color: var(--text); opacity: 0.55; font-weight: 600; }
+.opt-row { display: flex; gap: 10px; }
+.opt {
+  min-width: 58px;
+  font-family: 'Manrope', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.12em;
+  color: var(--text); background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.16); border-radius: 999px; padding: 12px 18px;
+  transition: all 0.25s ease;
+}
+.opt.active { border-color: rgba(243,230,207,0.7); color: var(--gold); background: rgba(243,230,207,0.06); }
+.opt:hover { border-color: rgba(243,230,207,0.5); }
+.hint { font-size: 11.5px; font-weight: 300; line-height: 1.6; color: var(--text); opacity: 0.45; max-width: 40ch; }
+.price { font-size: 30px; font-weight: 300; color: var(--text); margin-top: 2px; }
+.reserve-form { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 320px; }
+.reserve-form input {
+  font-family: 'Manrope', sans-serif; font-size: 14px; color: var(--text);
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 999px; padding: 15px 22px; text-align: center; outline: none;
+  transition: border-color 0.25s ease;
+}
+.reserve-form input::placeholder { color: rgba(216,211,218,0.4); }
+.reserve-form input:focus { border-color: rgba(243,230,207,0.5); }
+.reserve-form.checkout-mode input { display: none; }
+.reserve-form .cta { width: 100%; }
+.reserve-note { font-size: 11px; font-weight: 300; color: var(--text); opacity: 0.4; }
+
+/* ============ share sheet ============ */
+.share-sheet {
+  position: fixed; inset: 0; z-index: 9200;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(4, 4, 6, 0.82); backdrop-filter: blur(8px);
+  padding: 24px;
+}
+.share-sheet-inner { display: flex; flex-direction: column; align-items: center; gap: 22px; max-height: 92vh; }
+#shareCanvas {
+  max-height: 70vh; width: auto; max-width: 90vw;
+  border-radius: 14px; box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+}
+.share-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: center; }
+
 /* ---------- responsive ---------- */
 @media (max-width: 640px) {
   .chrome { padding: 26px 22px; }
@@ -269,6 +365,8 @@ body { position: relative; width: 100vw; height: 100vh; }
   .focus { width: 64vmin; height: 64vmin; }
   .cam-copy { bottom: 9vh; }
   .scan-sub { font-size: 14px; }
+  .reserve-stone { font-size: 28px; }
+  .actions { gap: 12px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

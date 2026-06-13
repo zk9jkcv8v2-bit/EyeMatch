@@ -25,6 +25,20 @@ export const config = {
   brandIris: { core: '#8a6b38', mid: '#5d7791', edge: '#27384c' },
 
   beadCount: 24,
+
+  // --- Commerce ---------------------------------------------------------
+  // Real checkout with NO backend and NO secret keys: create the product in
+  // Stripe, make a Payment Link per wrist size, and paste the URLs here.
+  // While links are empty, the button captures an email reservation instead.
+  // Docs: https://stripe.com/payments/payment-links
+  checkout: {
+    currency: '$',
+    price: 49,
+    paymentLinks: { S: '', M: '', L: '' },
+    // Optional: POST reservations here (e.g. a Formspree endpoint). If empty,
+    // reservations are kept in localStorage and confirmed on screen.
+    reserveEndpoint: '',
+  },
   // The brand icon's inner opening is an 8-petal soft star — the iris
   // silhouette and the 3D metal ring both derive from this.
   petals: 8,

@@ -50,6 +50,27 @@ Generated media goes in `public/media/`. Point `config.heroVideo` in
 the landing scene. Everything else is procedural and color-matched to the
 visitor's eye, so video is optional.
 
+## Checkout (no backend, no secret keys)
+
+Real payment runs through **Stripe Payment Links** — no server, no secret keys
+in the client:
+
+1. In Stripe, create the product and a **Payment Link** for each wrist size.
+2. Paste the URLs into `config.checkout.paymentLinks` (`S` / `M` / `L`) in
+   `src/config.js`, and set `currency` / `price` for the displayed amount.
+
+While the links are empty, the button captures an **email reservation**
+instead (stored in `localStorage`, or POSTed to `config.checkout.reserveEndpoint`
+if you set one — e.g. a Formspree URL). To go fully live, just fill in the
+Payment Links.
+
+## Sharing
+
+The reveal's **SHARE** button renders a portrait result card to canvas
+(`drawShareCard()` in `src/main.js`) — SAVE IMAGE downloads a PNG; SHARE… uses
+the Web Share API on supported devices. Update the `og-image.png` in
+`public/brand/` with a proper 1200×630 social preview before launch.
+
 ## Demo without a camera
 
 In the browser console:
