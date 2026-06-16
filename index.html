@@ -4,148 +4,78 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#07070a" />
-  <title>EyeMatch — Your eyes, set in stone</title>
-  <meta name="description" content="Scan your eye and discover the gemstone bracelet that matches your iris. No two eyes are alike — neither is your stone." />
+  <title>EyeMatch — Every eye holds a color</title>
+  <meta name="description" content="EyeMatch transforms the unique colors of your iris into a handcrafted bracelet. No two eyes are alike — neither is your stone." />
 
-  <!-- Open Graph / social -->
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="EyeMatch — Your eyes, set in stone" />
-  <meta property="og:description" content="Scan your eye and discover the gemstone bracelet that matches your iris." />
+  <meta property="og:title" content="EyeMatch — Every eye holds a color" />
+  <meta property="og:description" content="The unique colors of your iris, transformed into a handcrafted bracelet." />
   <meta property="og:image" content="/brand/og-image.png" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="EyeMatch — Your eyes, set in stone" />
-  <meta name="twitter:description" content="Scan your eye and discover the gemstone bracelet that matches your iris." />
-  <meta name="twitter:image" content="/brand/og-image.png" />
 
   <link rel="icon" href="/brand/EM_ICON_BEIGE.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@1,400;1,500&family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,400;1,9..144,500&family=Manrope:wght@200;300;400;500;600&display=swap" rel="stylesheet" />
 </head>
 <body>
+  <!-- Fixed cinematic 3D stage behind everything -->
   <div id="webgl"></div>
-
-  <video id="heroVideo" class="hero-video" autoplay muted loop playsinline hidden></video>
-
-  <div class="ambient"></div>
   <div class="vignette"></div>
   <div id="grain"></div>
 
   <header class="chrome">
-    <a class="wordmark" href="#" id="wordmark" aria-label="EyeMatch">
+    <a class="wordmark" href="/" aria-label="EyeMatch">
       <img src="/brand/EM_LOGO_BEIGE.svg" alt="EyeMatch" />
     </a>
   </header>
 
-  <!-- ============ ACT I : DORMANT STONE ============ -->
-  <section class="act" id="act-landing">
-    <div class="copy">
-      <p class="tagline">Every eye holds a <em>color</em>.</p>
-      <div class="actions">
-        <button class="cta" id="beginBtn">FIND YOUR COLOR</button>
+  <main id="scroll">
+
+    <!-- ============ HERO ============ -->
+    <section class="panel" id="hero">
+      <div class="sticky center">
+        <h1 class="display">Every eye holds a <em>color</em>.</h1>
+        <p class="sub">Discover yours.</p>
+        <button class="cta" id="beginBtn">BEGIN</button>
       </div>
-    </div>
-  </section>
+      <div class="scroll-cue" aria-hidden="true"><span></span></div>
+    </section>
 
-  <!-- ============ ACT II : THE READING ============ -->
-  <section class="act" id="act-scan">
-    <div class="cam-backdrop"></div>
-    <video id="camVideo" class="cam-feed" autoplay playsinline muted></video>
-    <div class="cam-vignette"></div>
-
-    <div class="focus" id="focus">
-      <svg class="focus-petal" id="focusPetalBg" viewBox="-110 -110 220 220" aria-hidden="true"></svg>
-      <svg class="focus-petal draw" id="focusPetalDraw" viewBox="-110 -110 220 220" aria-hidden="true"></svg>
-    </div>
-
-    <!-- Front door: a clear choice, no surprise permission prompt -->
-    <div class="scan-intro" id="scanIntro">
-      <svg class="scan-intro-petal" viewBox="-110 -110 220 220" aria-hidden="true" id="introPetal"></svg>
-      <div class="scan-intro-body">
-        <p class="eyebrow">STEP 2 OF 2</p>
-        <p class="tagline">Let's find your <em>color</em>.</p>
-        <p class="scan-sub" id="scanIntroSub">Take a quick photo of your eye — or upload one you already have.</p>
-        <div class="actions">
-          <button class="cta big" id="useCameraBtn">USE MY CAMERA</button>
-          <button class="cta ghost" id="useUploadBtn">UPLOAD A PHOTO</button>
-        </div>
-        <p class="privacy-note">Your photo stays on your device. We read its color and never store it.</p>
+    <!-- ============ DISCOVERY ============ -->
+    <section class="panel tall" id="discovery">
+      <div class="sticky align-right">
+        <p class="eyebrow">DISCOVERY</p>
+        <h2 class="display sm">Your eye already<br />contains the design.</h2>
+        <div class="swatches" id="discSwatches" aria-hidden="true"></div>
       </div>
-    </div>
+    </section>
 
-    <!-- Live capture controls -->
-    <div class="cam-copy" id="camControls" hidden>
-      <p class="tagline status" id="scanStatus">Center your eye, then capture.</p>
-      <div class="actions">
-        <button class="cta big" id="captureBtn">CAPTURE</button>
+    <!-- ============ TRANSFORMATION ============ -->
+    <section class="panel tall" id="transformation">
+      <div class="sticky align-right">
+        <p class="eyebrow">TRANSFORMATION</p>
+        <h2 class="display sm">From biology<br />to craftsmanship.</h2>
+        <ol class="steps" id="transformSteps">
+          <li>Eye</li>
+          <li>Palette</li>
+          <li>Bracelet</li>
+        </ol>
       </div>
-      <button class="text-link" id="switchUploadBtn">or upload a photo instead</button>
-    </div>
+    </section>
 
-    <input type="file" id="uploadInput" accept="image/*" hidden />
-    <canvas id="captureCanvas" width="480" height="480" hidden></canvas>
-  </section>
-
-  <!-- ============ ACT III : REVEAL ============ -->
-  <section class="act" id="act-reveal">
-    <div class="copy">
-      <p class="eyebrow" id="revealEyebrow">YOUR STONE</p>
-      <p class="tagline big" id="stoneName"><em>&nbsp;</em></p>
-      <p class="sub" id="revealSub">No two irises are alike. Neither is this.</p>
-      <div class="actions">
-        <button class="cta" id="reserveBtn">RESERVE YOURS</button>
-        <button class="cta ghost" id="shareBtn">SHARE</button>
-        <button class="cta ghost" id="againBtn">SCAN AGAIN</button>
+    <!-- ============ HANDOFF (end of the slice) ============ -->
+    <section class="panel" id="handoff">
+      <div class="sticky center">
+        <h2 class="display sm">Find your <em>color</em>.</h2>
+        <button class="cta" id="beginBtn2">BEGIN YOUR EYEMATCH</button>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- ============ ACT IV : RESERVE / CHECKOUT ============ -->
-  <section class="act" id="act-reserve">
-    <div class="reserve-card">
-      <p class="eyebrow">YOUR EYEMATCH BRACELET</p>
-      <p class="reserve-stone"><em id="reserveStoneName">Aquamarine</em></p>
-      <div class="bead-row" id="reserveBeads"></div>
+  </main>
 
-      <div class="control-group">
-        <p class="control-label">WRIST SIZE</p>
-        <div class="opt-row" id="sizeOptions">
-          <button class="opt" data-size="S">S</button>
-          <button class="opt active" data-size="M">M</button>
-          <button class="opt" data-size="L">L</button>
-        </div>
-        <p class="hint">Wrap a strip of paper around your wrist and measure it.<br />S ≈ 14–15cm · M ≈ 15–17cm · L ≈ 17–19cm. Unsure? M fits most.</p>
-      </div>
-
-      <p class="price"><span id="priceVal">$49</span></p>
-
-      <form class="reserve-form" id="reserveForm" novalidate>
-        <input type="email" id="emailInput" inputmode="email" autocomplete="email"
-               placeholder="Email for your reservation" />
-        <button class="cta big" id="checkoutBtn" type="submit">CHECKOUT</button>
-      </form>
-      <p class="reserve-note" id="reserveNote">Secure checkout. Your eye photo is never stored.</p>
-
-      <button class="text-link" id="reserveBackBtn">← back to your stone</button>
-    </div>
-  </section>
-
-  <!-- Shareable result card (rendered to canvas, offered as image) -->
-  <div class="share-sheet" id="shareSheet" hidden>
-    <div class="share-sheet-inner">
-      <canvas id="shareCanvas" width="1080" height="1350"></canvas>
-      <div class="share-actions">
-        <button class="cta big" id="shareDownloadBtn">SAVE IMAGE</button>
-        <button class="cta ghost" id="shareNativeBtn" hidden>SHARE…</button>
-        <button class="text-link" id="shareCloseBtn">close</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="flash" id="flash"></div>
-  <div class="wipe" id="wipe"></div>
   <div class="cursor" id="cursor"></div>
 
-  <script type="module" src="/src/main.js"></script>
+  <script type="module" src="/src/home.js"></script>
 </body>
 </html>
