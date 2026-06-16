@@ -54,13 +54,20 @@ export class Stage {
     this.composer.addPass(new OutputPass());
 
     window.addEventListener('resize', () => this.resize());
+    // Self-heal: always match the actual container size, even when a
+    // resize event never fires (embedded previews, iframes, late layout).
+    if (window.ResizeObserver) {
+      this._ro = new ResizeObserver(() => this.resize());
+      this._ro.observe(container);
+    }
     this.resize();
 
     this.renderer.setAnimationLoop(() => this.tick());
   }
 
   resize() {
-    const w = window.innerWidth, h = window.innerHeight;
+    const w = Math.max(1, this.container.clientWidth || window.innerWidth);
+    const h = Math.max(1, this.container.clientHeight || window.innerHeight);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
