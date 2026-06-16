@@ -43,8 +43,8 @@ stage.onTick.push((t, dt) => {
   iris.update(t);
   bracelet.update(t);
   if (sceneState.spin) bracelet.group.rotation.z += dt * 0.06;
-  // Lift the whole composition into the upper-middle so copy has room below.
-  stage.world.position.y = 0.5 + Math.sin(t * 0.45) * 0.04;
+  // Lift the composition slightly so centered copy reads below it.
+  stage.world.position.y = 0.38 + Math.sin(t * 0.45) * 0.04;
 });
 
 /* ============ atmosphere: grain ============ */
@@ -114,9 +114,8 @@ master
   .to(iris.uniforms.uAlpha, { value: 1, duration: 1.4, ease: 'power2.out' }, 1.6)
   .fromTo(iris.mesh.scale, { x: 0.8, y: 0.8 }, { x: 1.05, y: 1.05, duration: 1.4, ease: 'power2.out' }, 1.6)
 
-  // [discovery] zoom into the iris, sliding it left so the copy reads on the right
-  .to(iris.mesh.scale, { x: 1.55, y: 1.55, duration: 1.6, ease: 'power1.inOut' }, 3.2)
-  .to(stage.world.position, { x: -0.85, duration: 1.6, ease: 'power2.inOut' }, 3.0)
+  // [discovery] zoom into the iris — kept centered, the eye fills the frame
+  .to(iris.mesh.scale, { x: 1.32, y: 1.32, duration: 1.6, ease: 'power1.inOut' }, 3.2)
 
   // [transformation] eye → palette → bracelet: pupil contracts, fibres stream
   // outward and crystallize into beads as the iris fades away
@@ -131,12 +130,9 @@ master
   .to(iris.uniforms.uAlpha, { value: 0, duration: 1.2, ease: 'power2.in' }, 6.4)
   .to(iris.mesh.scale, { x: 0.8, y: 0.8, duration: 1.2, ease: 'power2.in' }, 6.4)
 
-  // [transformation settle] the finished bracelet, tipped, still on the left
+  // [transformation settle / handoff] the finished bracelet, centered, tipped
   .to(bracelet.group.rotation, { x: -1.0, duration: 1.6, ease: 'power2.inOut' }, 7.0)
-  .to(bracelet.group.scale, { x: 0.88, y: 0.88, z: 0.88, duration: 1.6, ease: 'power2.inOut' }, 7.0)
-
-  // [handoff] glide the artifact back to center beneath the final line
-  .to(stage.world.position, { x: 0, duration: 1.8, ease: 'power2.inOut' }, 7.8);
+  .to(bracelet.group.scale, { x: 0.9, y: 0.9, z: 0.9, duration: 1.6, ease: 'power2.inOut' }, 7.0);
 
 /* ============ per-section copy reveals (calm fades) ============ */
 gsap.utils.toArray('.panel .sticky').forEach((el) => {

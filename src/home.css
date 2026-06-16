@@ -54,21 +54,25 @@ body { width: 100%; overflow-x: hidden; }
 .panel { position: relative; min-height: 100vh; }
 .panel.tall { min-height: 200vh; }
 
+/* Every section is a centered cinematic moment: 3D centered above, copy
+   centered in the lower third. No split-screen. */
 .sticky {
   position: sticky; top: 0;
   height: 100vh;
   display: flex; flex-direction: column;
-  justify-content: center;
-  padding: 0 8vw;
+  align-items: center; text-align: center;
+  justify-content: flex-end;
+  padding: 0 8vw 13vh;
   pointer-events: none;
 }
 .sticky > * { pointer-events: auto; }
-.sticky.center { align-items: center; text-align: center; }
-.sticky.align-right { align-items: flex-end; text-align: right; }
-.sticky.align-left { align-items: flex-start; text-align: left; }
 
-/* Hero & handoff: copy sits in the lower third, beneath the floating bracelet. */
-#hero .sticky, #handoff .sticky { justify-content: flex-end; padding-bottom: 12vh; }
+/* Soft scrim along the bottom so centered copy always reads over the 3D. */
+body::after {
+  content: ''; position: fixed; left: 0; right: 0; bottom: 0; height: 46vh;
+  z-index: 4; pointer-events: none;
+  background: linear-gradient(to top, rgba(7,7,10,0.92) 8%, rgba(7,7,10,0.55) 45%, rgba(7,7,10,0));
+}
 
 /* ---------- typography ---------- */
 .display {
