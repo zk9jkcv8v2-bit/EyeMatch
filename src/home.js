@@ -177,8 +177,15 @@ gsap.to('#hero .sticky', {
   });
 })();
 
-/* ============ enter the experience ============ */
-function enter() { window.location.href = '/experience.html'; }
+/* ============ enter the experience (seamless wipe → same world) ============ */
+let entering = false;
+function enter() {
+  if (entering) return;
+  entering = true;
+  if (reduced) { window.location.href = '/experience.html'; return; }
+  $('enterWipe').classList.add('covering');
+  setTimeout(() => { window.location.href = '/experience.html'; }, 800);
+}
 $('beginBtn').addEventListener('click', enter);
 $('beginBtn2').addEventListener('click', enter);
 
