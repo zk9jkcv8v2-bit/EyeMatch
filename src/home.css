@@ -123,14 +123,6 @@ body::after {
   50% { box-shadow: 0 0 28px 2px rgba(var(--glow), 0.14); }
 }
 
-/* ---------- discovery swatches ---------- */
-.swatches { display: flex; gap: 14px; margin-top: 40px; }
-.swatches span {
-  width: 26px; height: 26px; border-radius: 50%;
-  opacity: 0; transform: scale(0.4);
-  box-shadow: inset -4px -5px 9px rgba(0,0,0,0.5), inset 4px 4px 8px rgba(255,255,255,0.2), 0 4px 14px rgba(0,0,0,0.5);
-}
-
 /* ---------- transformation steps ---------- */
 .steps {
   list-style: none; display: flex; gap: 18px; align-items: center;
@@ -162,18 +154,6 @@ body::after {
   100% { opacity: 0; }
 }
 
-/* ---------- enter transition: a dark circle grows from center, then we
-   navigate to the experience (which opens with its own iris-wipe) ---------- */
-.enter-wipe {
-  position: fixed; top: 50%; left: 50%;
-  width: 24px; height: 24px; margin: -12px 0 0 -12px;
-  border-radius: 50%; background: var(--bg);
-  transform: scale(0); z-index: 9000; pointer-events: none;
-  will-change: transform;
-  transition: transform 0.8s cubic-bezier(0.76, 0, 0.24, 1);
-}
-.enter-wipe.covering { transform: scale(220); }
-
 /* ---------- custom cursor ---------- */
 .cursor {
   position: fixed; top: 0; left: 0; width: 28px; height: 28px;
@@ -192,6 +172,402 @@ body::after {
   .cta { padding: 18px 40px; }
 }
 
+/* ============================================================
+   THE FLOW — capture → reveal → reserve.
+   Layered over the SAME persistent 3D world as the landing, so
+   the bracelet you watched float becomes the one that's yours.
+   ============================================================ */
+[hidden] { display: none !important; }
+
+.flow {
+  position: fixed; inset: 0; z-index: 40;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.5s ease;
+}
+.flow.active { opacity: 1; pointer-events: auto; }
+
+/* Opaque backdrop hides the dormant 3D during capture; lifts for the reveal. */
+.flow-backdrop {
+  position: absolute; inset: 0; z-index: 1;
+  background: var(--bg);
+  opacity: 0; transition: opacity 0.8s ease;
+}
+.flow.capturing .flow-backdrop { opacity: 1; }
+/* Purchase: no backdrop — the large matched bracelet IS the hero up top; the
+   scrolling content sheet grounds itself as it rises over the bracelet. */
+.flow.purchasing .flow-backdrop { opacity: 0; }
+/* Collection is a 2-D keepsake list — gently dim the 3-D behind it. */
+.flow.collection .flow-backdrop {
+  opacity: 1;
+  background: linear-gradient(to top, #07070a 70%, rgba(7,7,10,0.8) 88%, rgba(7,7,10,0.5) 100%);
+}
+
+/* The live feed fills the screen, graded to feel cinematic — not a webcam. */
+.cam-feed {
+  position: absolute; inset: 0; z-index: 2;
+  width: 100%; height: 100%; object-fit: cover;
+  transform: scaleX(-1);
+  filter: saturate(0.5) contrast(1.12) brightness(0.78);
+  opacity: 0; transition: opacity 0.9s ease, filter 0.6s ease;
+}
+.flow.live .cam-feed.live { opacity: 1; }
+.flow.reading .cam-feed { filter: saturate(0.9) contrast(1.18) brightness(1.05); }
+
+/* Heavy radial mask — your eye floats out of darkness at center. */
+.cam-vignette {
+  position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  opacity: 0; transition: opacity 0.9s ease;
+  background: radial-gradient(circle at 50% 50%,
+    transparent 12%, rgba(7,7,10,0.35) 30%, rgba(7,7,10,0.86) 52%, #07070a 74%);
+}
+.flow.live .cam-vignette { opacity: 1; }
+
+/* Brand-petal focus guide — appears only with the live camera. */
+.focus {
+  position: absolute; top: 50%; left: 50%; z-index: 4;
+  width: min(46vmin, 320px); height: min(46vmin, 320px);
+  transform: translate(-50%, -52%); pointer-events: none;
+  opacity: 0; transition: opacity 0.6s ease;
+}
+.flow.live .focus { opacity: 1; }
+.focus-petal { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.focus-petal path { fill: none; stroke: rgba(243,230,207,0.9); stroke-width: 1.1; vector-effect: non-scaling-stroke; }
+#focusPetalBg path { stroke: rgba(243,230,207,0.16); }
+.focus-petal.draw { filter: drop-shadow(0 0 10px rgba(var(--glow),0.5)); animation: focusRot 60s linear infinite; }
+@keyframes focusRot { to { transform: rotate(360deg); } }
+
+/* Flow stages: centered moment, copy in the lower third (matches the scroll). */
+.flow-stage {
+  position: absolute; inset: 0; z-index: 6;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  text-align: center; padding: 0 8vw 13vh; pointer-events: none;
+}
+.flow-stage > * { pointer-events: auto; }
+#captureIntro { justify-content: center; padding-bottom: 0; }
+
+/* Faint rotating petal behind the front-door choice. */
+.intro-petal {
+  position: absolute; top: 50%; left: 50%;
+  width: min(74vmin, 540px); height: min(74vmin, 540px);
+  transform: translate(-50%, -50%); pointer-events: none;
+  animation: focusRot 90s linear infinite;
+}
+.intro-petal path { fill: none; stroke: rgba(243,230,207,0.12); stroke-width: 1; vector-effect: non-scaling-stroke; }
+
+.flow-copy {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center;
+  max-width: min(92vw, 600px);
+}
+.flow-copy .eyebrow { margin-bottom: 22px; }
+.flow-copy .sub { margin-top: 22px; }
+.flow-actions { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin-top: 38px; }
+.flow-actions .cta { margin-top: 0; }
+.micro {
+  margin-top: 22px; font-size: 11px; font-weight: 300; letter-spacing: 0.02em;
+  color: var(--text); opacity: 0.4; max-width: 36ch;
+}
+
+/* Secondary / ghost CTA. */
+.cta.ghost { font-weight: 500; letter-spacing: 0.28em; padding: 18px 38px; opacity: 0.7; }
+.cta.ghost::before { display: none; }
+.cta.ghost:hover { opacity: 1; }
+/* Bigger, clearer target for the capture step (works for any age). */
+.cta.big { padding: 22px 56px; font-size: 12px; letter-spacing: 0.3em; }
+
+/* Live capture controls. */
+.capture-copy {
+  position: absolute; left: 0; right: 0; bottom: 12vh; z-index: 6;
+  display: flex; flex-direction: column; align-items: center; gap: 22px;
+  pointer-events: none;
+}
+.capture-copy > * { pointer-events: auto; }
+.status { min-height: 1.4em; opacity: 0.85; margin-top: 0; }
+
+.text-link {
+  background: none; border: none;
+  font-family: 'Manrope', sans-serif; font-size: 12px; font-weight: 400;
+  letter-spacing: 0.04em; color: var(--text); opacity: 0.5;
+  text-decoration: underline; text-underline-offset: 4px;
+  transition: opacity 0.3s ease, color 0.3s ease;
+}
+.text-link:hover { opacity: 0.95; color: var(--gold); }
+
+/* The reveal — the emotional payoff. The stone is named in serif gold. */
+.reveal-name {
+  font-family: 'Fraunces', serif; font-style: italic; font-weight: 500;
+  font-size: clamp(40px, 6vw, 80px); line-height: 1.05;
+  color: var(--gold); text-shadow: 0 0 48px rgba(var(--glow), 0.42);
+  margin-top: 6px;
+}
+.reveal-name.sm { font-size: clamp(32px, 4.4vw, 52px); }
+
+/* ============================================================
+   PURCHASE — a quiet editorial page, mobile-first. Generous air,
+   one idea per zone: bracelet (hero) → stone name (the moment)
+   → customization → the buy. Nothing squeezed, nothing touching edges.
+   ============================================================ */
+/* PURCHASE — mobile: everything visible without scrolling. The hero spacer
+   reserves the top 40vh for the floating 3-D bracelet; the content sheet
+   fills the rest. A wider gradient blend (25% transition zone) eliminates
+   the visible seam between the WebGL canvas and the dark sheet.
+   Desktop ≥900px: two-column — bracelet left, content right (see below). */
+.configure-stage {
+  justify-content: flex-start;
+  padding: 0;
+  overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.configure-stage::-webkit-scrollbar { display: none; }
+
+/* COLLECTION — stays a scrollable page (can have many bracelet cards). */
+.collection-stage {
+  justify-content: flex-start;
+  padding: 0;
+  overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.collection-stage::-webkit-scrollbar { display: none; }
+
+.config-hero { flex: 0 0 40vh; width: 100%; pointer-events: none; }
+.collection-hero { flex: 0 0 15vh; width: 100%; pointer-events: none; }
+.config-sheet, .collection-sheet {
+  flex: 1 0 auto; width: 100%; min-height: 60vh;
+  display: flex; justify-content: center;
+  padding: clamp(18px, 3vh, 34px) max(26px, env(safe-area-inset-left))
+           max(36px, env(safe-area-inset-bottom)) max(26px, env(safe-area-inset-right));
+  /* 25% transition zone removes the hard seam between WebGL and sheet */
+  background: linear-gradient(to top, var(--bg) 75%, rgba(7,7,10,0) 100%);
+}
+.collection-sheet { min-height: 85vh; }
+.configure-panel, .collection-panel {
+  width: 100%; max-width: 440px; pointer-events: auto;
+  display: flex; flex-direction: column; align-items: stretch;
+  text-align: center;
+}
+
+/* Mobile: compress the configure zones so everything fits in 60vh without
+   the user ever needing to scroll. Hide the wrist-size hint (not critical
+   on mobile — S/M/L is self-explanatory) to reclaim vertical space. */
+.configure-stage .zone + .zone { margin-top: 20px; padding-top: 20px; }
+.configure-stage .hint { display: none; }
+.configure-stage .price { font-size: 38px; }
+.configure-stage .price-block { margin-bottom: 16px; }
+.configure-stage .zone-purchase .text-link { margin-top: 14px; }
+.configure-stage .add-invite { margin-top: 12px; padding: 13px 16px; }
+
+.zone { display: flex; flex-direction: column; align-items: center; }
+.zone + .zone {
+  margin-top: clamp(30px, 5vh, 52px);
+  padding-top: clamp(30px, 5vh, 52px);
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+.zone-label {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.42em;
+  color: var(--text); opacity: 0.42; margin-bottom: 22px; text-indent: 0.42em;
+}
+.zone-custom .zone-label:not(:first-child) { margin-top: 38px; }
+.zone-identity .bead-row { margin-top: 22px; }
+/* the stone name — the emotional moment, given real size */
+.zone-identity .reveal-name.sm { font-size: clamp(40px, 11vw, 56px); line-height: 1.04; margin-top: 4px; }
+
+/* ---- pattern (mood) selector ---- */
+/* All three moods in one even row (never a 2 + 1 split). */
+.pattern-select { display: flex; gap: 10px; justify-content: center; width: 100%; flex-wrap: nowrap; }
+#revealPattern { margin-top: 34px; }
+.pattern {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  flex: 1 1 0; min-width: 0; min-height: 70px; padding: 14px 6px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.12); border-radius: 16px;
+  transition: border-color 0.3s ease, background 0.3s ease, transform 0.3s ease;
+}
+.pattern:hover { border-color: rgba(243,230,207,0.4); }
+.pattern.active {
+  border-color: rgba(243,230,207,0.6); background: rgba(243,230,207,0.06);
+  transform: translateY(-1px);
+}
+.pattern-name {
+  font-family: 'Fraunces', serif; font-style: italic; font-weight: 500;
+  font-size: 18px; color: var(--text); transition: color 0.3s ease;
+}
+.pattern.active .pattern-name { color: var(--gold); }
+.pattern-note {
+  font-size: 9px; font-weight: 500; letter-spacing: 0.13em; text-transform: uppercase;
+  color: var(--text); opacity: 0.42;
+}
+
+.bead-row { display: flex; gap: 7px; }
+.bead-row span {
+  width: 18px; height: 18px; border-radius: 50%;
+  box-shadow: inset -3px -4px 7px rgba(0,0,0,0.5), inset 3px 3px 6px rgba(255,255,255,0.22), 0 3px 8px rgba(0,0,0,0.5);
+}
+
+/* ---- wrist size: large, comfortable tap targets ---- */
+.opt-row { display: flex; gap: 12px; justify-content: center; }
+.opt {
+  min-width: 64px; min-height: 52px;
+  font-family: 'Manrope', sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.12em;
+  color: var(--text); background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.16); border-radius: 999px; padding: 0 22px;
+  transition: all 0.25s ease;
+}
+.opt.active { border-color: rgba(243,230,207,0.7); color: var(--gold); background: rgba(243,230,207,0.06); }
+.opt:hover { border-color: rgba(243,230,207,0.5); }
+.hint { font-size: 12px; font-weight: 300; line-height: 1.6; color: var(--text); opacity: 0.45; max-width: 34ch; margin-top: 20px; }
+
+/* ---- purchase zone: price → the buy → the gift invitation ---- */
+.zone-purchase { align-items: stretch; }
+.price-block { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 30px; }
+.price {
+  font-family: 'Fraunces', serif; font-style: italic; font-weight: 500;
+  font-size: 46px; line-height: 1; color: var(--gold);
+  text-shadow: 0 0 30px rgba(var(--glow), 0.22);
+}
+.price-was { font-size: 17px; color: var(--text); opacity: 0.4; text-decoration: line-through; }
+.price-save { font-size: 10.5px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); opacity: 0.9; }
+
+/* primary buy — the prominent, expensive moment */
+.cta.full { width: 100%; margin-top: 0; }
+.cta.solid {
+  background: linear-gradient(180deg, #efe4cf, #e2d4bd);
+  color: #16140f; border-color: transparent; font-weight: 600;
+  box-shadow: 0 14px 34px rgba(0,0,0,0.45), 0 0 26px rgba(var(--glow), 0.14);
+}
+.cta.solid::before { display: none; }
+.cta.solid:hover { background: linear-gradient(180deg, #f3e9d6, #e7dbc5); color: #16140f; }
+
+/* gift invitation to add another bracelet */
+.add-invite {
+  display: flex; align-items: center; gap: 15px; width: 100%; text-align: left;
+  margin-top: 16px; padding: 16px 20px;
+  background: rgba(255,255,255,0.02);
+  border: 1px dashed rgba(243,230,207,0.26); border-radius: 18px;
+  transition: border-color 0.3s ease, background 0.3s ease;
+}
+.add-invite:hover { border-color: rgba(243,230,207,0.5); background: rgba(243,230,207,0.04); }
+.add-invite.slim { justify-content: center; }
+.add-invite-icon {
+  flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 22px; font-weight: 300; line-height: 1;
+  color: var(--gold); border: 1px solid rgba(243,230,207,0.4);
+}
+.add-invite-copy { display: flex; flex-direction: column; gap: 3px; }
+.add-invite-title { font-family: 'Fraunces', serif; font-style: italic; font-weight: 500; font-size: 18px; color: var(--gold); }
+.add-invite-sub { font-size: 11.5px; line-height: 1.45; color: var(--text); opacity: 0.52; }
+
+.purchase-note { margin-top: 22px; font-size: 11.5px; font-weight: 300; line-height: 1.6; color: var(--text); opacity: 0.4; text-align: center; }
+.zone-purchase .text-link { margin-top: 22px; align-self: center; }
+
+/* ---- the collection: bracelets stacked as a quiet keepsake list ---- */
+#collectionTitle em { white-space: nowrap; }
+.collection-list { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; width: 100%; }
+.set-member {
+  display: flex; align-items: center; gap: 16px; width: 100%;
+  padding: 18px 20px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 18px;
+}
+.set-strand { display: flex; gap: 5px; flex: 0 0 auto; }
+.set-strand span {
+  width: 16px; height: 16px; border-radius: 50%;
+  box-shadow: inset -2px -3px 5px rgba(0,0,0,0.5), inset 2px 2px 4px rgba(255,255,255,0.22), 0 2px 6px rgba(0,0,0,0.5);
+}
+.set-meta { display: flex; flex-direction: column; gap: 12px; flex: 1 1 auto; text-align: left; min-width: 0; }
+.set-stone {
+  font-family: 'Fraunces', serif; font-style: italic; font-weight: 500;
+  font-size: 22px; color: var(--gold);
+}
+.set-stone .set-pattern {
+  font-family: 'Manrope', sans-serif; font-style: normal; font-weight: 500;
+  font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--text); opacity: 0.4; margin-left: 10px;
+}
+.opt-row.mini { gap: 8px; justify-content: flex-start; }
+.opt-row.mini .opt { min-width: 44px; min-height: 40px; padding: 0 12px; font-size: 11px; }
+
+/* The light-sweep flash that lifts your color out of the photo. */
+.flash {
+  position: absolute; inset: 0; z-index: 8500; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle at 50% 50%,
+    rgba(255,248,232,0.95), rgba(243,230,207,0.5) 28%, transparent 60%);
+}
+
+/* The dark wipe that covers each transition between flow stages. */
+.wipe {
+  position: fixed; inset: 0; z-index: 9000; pointer-events: none;
+  background: var(--bg); clip-path: circle(0% at 50% 50%);
+}
+
+@media (max-width: 640px) {
+  /* Generous gutters on every side — nothing touches the edge (+ notch safe). */
+  .flow-stage {
+    padding-left: max(26px, env(safe-area-inset-left));
+    padding-right: max(26px, env(safe-area-inset-right));
+    padding-bottom: max(9vh, env(safe-area-inset-bottom));
+  }
+  /* purchase + collection stay full-bleed; their gutters live on the sheet */
+  .configure-stage, .collection-stage { padding: 0; }
+  .reveal-name { font-size: clamp(34px, 12vw, 52px); }
+  .cta.big { padding: 19px 44px; }
+  .focus { width: 64vmin; height: 64vmin; }
+  .capture-copy { bottom: 9vh; }
+  .pattern { padding: 13px 6px; }
+  .pattern-name { font-size: 16px; }
+  .pattern-note { font-size: 8.5px; letter-spacing: 0.1em; }
+  .price { font-size: 42px; }
+  .set-member { gap: 13px; padding: 16px; }
+  .set-stone { font-size: 19px; }
+  .add-invite { padding: 15px 16px; }
+  .add-invite-sub { font-size: 11px; }
+}
+
+/* ============================================================
+   PURCHASE — desktop two-column layout (≥900px)
+   Left column: transparent — the 3-D bracelet floats here.
+   Right column: dark content panel, vertically centred.
+   The bracelet is shifted left in world space via poseConfigure()
+   in flow.js to align with the left column.
+   ============================================================ */
+@media (min-width: 900px) {
+  .configure-stage {
+    flex-direction: row;
+    overflow: hidden;
+  }
+  .config-hero {
+    flex: 0 0 50%;
+    height: 100%;
+  }
+  .config-sheet {
+    flex: 0 0 50%;
+    min-height: unset;
+    height: 100%;
+    overflow-y: auto;
+    scrollbar-width: none;
+    /* Gradient fades left-to-right: transparent on the left (meets the bracelet
+       area), solid dark on the right (the reading surface). */
+    background: linear-gradient(to right, rgba(7,7,10,0) 0%, var(--bg) 14%);
+    align-items: center;
+    padding: clamp(40px,6vh,80px) clamp(36px,4vw,72px);
+  }
+  .config-sheet::-webkit-scrollbar { display: none; }
+  .configure-panel {
+    max-width: 400px;
+    width: 100%;
+  }
+  /* Restore full spacing on desktop — room is not a constraint here. */
+  .configure-stage .zone + .zone {
+    margin-top: clamp(28px, 4vh, 46px);
+    padding-top: clamp(28px, 4vh, 46px);
+  }
+  .configure-stage .hint { display: block; }
+  .configure-stage .price { font-size: 46px; }
+  .configure-stage .price-block { margin-bottom: 28px; }
+  .configure-stage .zone-purchase .text-link { margin-top: 20px; }
+  .configure-stage .add-invite { margin-top: 16px; padding: 16px 20px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  #grain, .scroll-cue span, .cta::before { animation: none; }
+  #grain, .scroll-cue span, .cta::before,
+  .focus-petal.draw, .intro-petal { animation: none; }
 }

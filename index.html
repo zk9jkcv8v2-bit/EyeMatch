@@ -47,7 +47,6 @@
       <div class="sticky center">
         <p class="eyebrow">DISCOVERY</p>
         <h2 class="display sm">Your eye already contains the design.</h2>
-        <div class="swatches" id="discSwatches" aria-hidden="true"></div>
       </div>
     </section>
 
@@ -74,7 +73,144 @@
 
   </main>
 
-  <div class="enter-wipe" id="enterWipe" aria-hidden="true"></div>
+  <!-- ============ THE FLOW: capture → reveal → reserve ============ -->
+  <!-- Layered over the same persistent 3D world. Hidden until BEGIN. -->
+  <div class="flow" id="flow" aria-hidden="true">
+    <div class="flow-backdrop" id="flowBackdrop"></div>
+
+    <!-- live camera feed (treated to feel cinematic, never "webcam") -->
+    <video id="camVideo" class="cam-feed" autoplay playsinline muted></video>
+    <div class="cam-vignette"></div>
+
+    <!-- brand-petal focus guide: one faint, one that draws itself -->
+    <div class="focus" id="focus">
+      <svg class="focus-petal" id="focusPetalBg" viewBox="-110 -110 220 220" aria-hidden="true"></svg>
+      <svg class="focus-petal draw" id="focusPetalDraw" viewBox="-110 -110 220 220" aria-hidden="true"></svg>
+    </div>
+
+    <!-- STEP 1a — the front door: a calm, unhurried choice -->
+    <section class="flow-stage" id="captureIntro">
+      <svg class="intro-petal" id="introPetal" viewBox="-110 -110 220 220" aria-hidden="true"></svg>
+      <div class="flow-copy">
+        <p class="eyebrow">STEP ONE</p>
+        <h2 class="display sm">Let's find your <em>color</em>.</h2>
+        <p class="sub" id="captureSub">Take a photo of your eye — or upload one you already have.</p>
+        <div class="flow-actions">
+          <button class="cta" id="useCameraBtn">USE MY CAMERA</button>
+          <button class="cta ghost" id="useUploadBtn">UPLOAD A PHOTO</button>
+        </div>
+        <p class="micro">Your photo stays on your device. We read its color and never store it.</p>
+      </div>
+    </section>
+
+    <!-- STEP 1b — live capture controls -->
+    <section class="flow-stage" id="captureLive" hidden>
+      <div class="capture-copy">
+        <p class="sub status" id="captureStatus">Center your eye, then capture.</p>
+        <button class="cta big" id="captureBtn">CAPTURE</button>
+        <button class="text-link" id="switchUploadBtn">or upload a photo instead</button>
+      </div>
+    </section>
+
+    <!-- STEP 2 — the reveal: their iris reborn → their bracelet -->
+    <section class="flow-stage" id="revealStage" hidden>
+      <div class="flow-copy">
+        <p class="eyebrow" id="revealEyebrow">YOUR STONE</p>
+        <h2 class="reveal-name" id="stoneName"><em>&nbsp;</em></h2>
+        <p class="sub" id="revealSub">No two irises are alike. Neither is this.</p>
+
+        <div class="pattern-select" id="revealPattern" aria-label="Stone arrangement">
+          <button class="pattern active" data-pattern="dusk"><span class="pattern-name">Dusk</span><span class="pattern-note">light into dark</span></button>
+          <button class="pattern" data-pattern="cadence"><span class="pattern-name">Cadence</span><span class="pattern-note">a repeating rhythm</span></button>
+          <button class="pattern" data-pattern="wild"><span class="pattern-name">Wild</span><span class="pattern-note">no two alike</span></button>
+        </div>
+
+        <div class="flow-actions">
+          <button class="cta" id="reserveBtn">MAKE IT YOURS</button>
+          <button class="cta ghost" id="againBtn">SCAN AGAIN</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 2b — purchase: bracelet owns the top half; each concern
+         (identity · customization · purchase) gets its own breathing zone. -->
+    <section class="flow-stage configure-stage" id="reserveStage" hidden>
+      <!-- dedicated hero space: the large matched bracelet renders here -->
+      <div class="config-hero" aria-hidden="true"></div>
+      <div class="config-sheet">
+        <div class="configure-panel">
+
+          <div class="zone zone-identity">
+            <p class="eyebrow">YOUR EYEMATCH BRACELET</p>
+            <h2 class="reveal-name sm"><em id="reserveStoneName">&nbsp;</em></h2>
+          </div>
+
+          <div class="zone zone-custom">
+            <p class="zone-label">WRIST SIZE</p>
+            <div class="opt-row" id="sizeOptions">
+              <button class="opt" data-size="S">S</button>
+              <button class="opt active" data-size="M">M</button>
+              <button class="opt" data-size="L">L</button>
+            </div>
+            <p class="hint">S ≈ 14–15cm · M ≈ 15–17cm · L ≈ 17–19cm. Unsure? M fits most.</p>
+          </div>
+
+          <div class="zone zone-purchase">
+            <div class="price-block"><span class="price" id="priceVal">$49</span></div>
+            <button class="cta solid full" id="checkoutBtn">CHECKOUT</button>
+            <button class="add-invite" id="addBraceletBtn">
+              <span class="add-invite-icon">+</span>
+              <span class="add-invite-copy">
+                <span class="add-invite-title">Add another bracelet</span>
+                <span class="add-invite-sub">For someone close — a partner, a parent, a friend. Ships together, 10% off.</span>
+              </span>
+            </button>
+            <button class="text-link" id="reserveBackBtn">← back to your stone</button>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 3 — the collection: every bracelet, together. A set, not a cart. -->
+    <section class="flow-stage collection-stage" id="collectionStage" hidden>
+      <div class="collection-hero" aria-hidden="true"></div>
+      <div class="collection-sheet">
+        <div class="collection-panel">
+          <div class="zone zone-identity">
+            <p class="eyebrow" id="collectionEyebrow">YOUR SET</p>
+            <h2 class="display sm" id="collectionTitle">Worn apart, <em>matched always</em>.</h2>
+            <p class="sub" id="collectionSub">Two eyes, two stones — one quiet thread between them.</p>
+          </div>
+
+          <div class="collection-list" id="collectionList"></div>
+
+          <div class="zone zone-purchase">
+            <div class="price-block">
+              <span class="price-was" id="setPriceWas"></span>
+              <span class="price" id="setPrice">$49</span>
+              <span class="price-save" id="setSave"></span>
+            </div>
+            <button class="cta solid full" id="setCheckoutBtn">CHECKOUT</button>
+            <button class="add-invite slim" id="addAnotherBtn">
+              <span class="add-invite-icon">+</span>
+              <span class="add-invite-copy">
+                <span class="add-invite-title">Add another bracelet</span>
+              </span>
+            </button>
+            <p class="purchase-note">Secure checkout. Your eye photos are never stored.</p>
+            <button class="text-link" id="collectionBackBtn">← back</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <input type="file" id="uploadInput" accept="image/*" hidden />
+    <canvas id="captureCanvas" width="480" height="480" hidden></canvas>
+    <div class="flash" id="flash"></div>
+  </div>
+
+  <div class="wipe" id="wipe"></div>
   <div class="cursor" id="cursor"></div>
 
   <script type="module" src="/src/home.js"></script>

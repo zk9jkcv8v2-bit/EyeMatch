@@ -69,6 +69,23 @@ function toColors(palette) {
 
 const smooth = (f) => f * f * (3 - 2 * f);
 
+const TAU = Math.PI * 2;
+
+// Which palette colour (0 = lightest … n-1 = darkest) sits on bead `i`, under a
+// named arrangement. The palette from buildMatch is already ordered light→dark.
+function colorIndexFor(pattern, i, count, n) {
+  if (pattern === 'cadence') return i % n;            // a steady repeating rhythm
+  if (pattern === 'wild') {                            // scattered, but every hue used
+    const h = Math.sin(i * 12.9898 + 4.1414) * 43758.5453;
+    return Math.floor((h - Math.floor(h)) * n) % n;
+  }
+  // 'dusk' — a seamless vertical gradient: lightest at the top of the wrist,
+  // darkest at the bottom, mirrored on both sides so there is no seam.
+  const ang = (i / count) * TAU;
+  const s = (Math.sin(ang) + 1) / 2;                   // 1 at top → 0 at bottom
+  return Math.round((1 - s) * (n - 1));
+}
+
 export class Bracelet {
   constructor({ count = 24, radius = 1.02, slots = 5, shiftPalettes = [] } = {}) {
     this.count = count;
@@ -81,6 +98,10 @@ export class Bracelet {
     this.shiftMode = false;
     this.dwell = 4.5;       // seconds a palette stays settled
     this.transition = 3.0;  // seconds to crossfade to the next eye colour
+
+    this.pattern = 'dusk';  // current stone arrangement (dusk | cadence | wild)
+    this._lastColors = null;
+    this._fading = false;
 
     const textures = Array.from({ length: 5 }, makeGemTexture);
 
@@ -119,17 +140,50 @@ export class Bracelet {
     this.shiftMode = true;
   }
 
-  // Lock to a fixed set of colours (the reveal, matched to the eye).
+  // Lock to a fixed set of colours (the reveal, matched to the eye), arranged
+  // by the current pattern. Applied instantly — used as the beads crystallize.
   setColors(hexColors) {
     this.shiftMode = false;
-    const colors = toColors(hexColors);
-    this.gems.forEach((bead) => {
-      bead.material.color.copy(colors[bead.userData.slot % colors.length]);
-    });
+    this._lastColors = hexColors.slice();
+    this._applyArrangement(false);
   }
 
-  // Cohesive, slow crossfade through the eye-colour palettes.
+  // Re-arrange the matched colours into a named pattern, crossfading in place.
+  setArrangement(pattern) {
+    if (!this._lastColors) return;
+    this.pattern = pattern;
+    this._applyArrangement(true);
+  }
+
+  _applyArrangement(fade) {
+    const colors = toColors(this._lastColors);
+    const n = colors.length;
+    const targets = this.gems.map(
+      (_, i) => colors[colorIndexFor(this.pattern, i, this.count, n)]
+    );
+    if (!fade) {
+      this.gems.forEach((bead, i) => bead.material.color.copy(targets[i]));
+      this._fading = false;
+      return;
+    }
+    this._fadeFrom = this.gems.map((bead) => bead.material.color.clone());
+    this._fadeTo = targets.map((c) => c.clone());
+    this._fadeT0 = performance.now();
+    this._fadeDur = 650;
+    this._fading = true;
+  }
+
+  // Crossfade an arrangement change, then the slow palette shift on the landing.
   update(t) {
+    if (this._fading) {
+      const f = Math.min(1, (performance.now() - this._fadeT0) / this._fadeDur);
+      const e = smooth(f);
+      for (let i = 0; i < this.gems.length; i++) {
+        this.gems[i].material.color.copy(this._fadeFrom[i]).lerp(this._fadeTo[i], e);
+      }
+      if (f >= 1) this._fading = false;
+      return;
+    }
     if (!this.shiftMode || this.shiftColors.length < 2) return;
     const n = this.shiftColors.length;
     const period = this.dwell + this.transition;

@@ -24,10 +24,9 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        // The cinematic scroll homepage…
+        // The whole experience now lives on one page: the cinematic scroll
+        // homepage flows seamlessly into capture → reveal → reserve.
         main: resolve(__dirname, 'index.html'),
-        // …and the full scan → reveal → reserve experience it hands off to.
-        experience: resolve(__dirname, 'experience.html'),
       },
     },
   },

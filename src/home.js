@@ -6,6 +6,7 @@ import { config } from './config.js';
 import { Stage } from './three/stage.js';
 import { Iris } from './three/iris.js';
 import { Bracelet } from './three/bracelet.js';
+import { createFlow } from './flow.js';
 
 gsap.registerPlugin(ScrollTrigger);
 const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -148,21 +149,6 @@ gsap.to('#hero .sticky', {
   scrollTrigger: { trigger: '#hero', start: 'top top', end: 'bottom top', scrub: true },
 });
 
-/* ============ discovery swatches (the extracted colors) ============ */
-(function swatches() {
-  const row = $('discSwatches');
-  const palette = config.shiftPalettes[0]; // soft eye-blue family
-  palette.forEach((c) => {
-    const s = document.createElement('span');
-    s.style.background = `radial-gradient(circle at 34% 28%, rgba(255,255,255,0.6), ${c} 42%, ${c} 72%, rgba(0,0,0,0.4) 100%)`;
-    row.appendChild(s);
-  });
-  gsap.to('#discSwatches span', {
-    opacity: 1, scale: 1, duration: 0.8, ease: 'back.out(2)', stagger: 0.1,
-    scrollTrigger: { trigger: '#discovery', start: 'top 40%', toggleActions: 'play none none reverse' },
-  });
-})();
-
 /* ============ transformation steps light up in sequence ============ */
 (function steps() {
   const items = [...$('transformSteps').children];
@@ -177,17 +163,12 @@ gsap.to('#hero .sticky', {
   });
 })();
 
-/* ============ enter the experience (seamless wipe → same world) ============ */
-let entering = false;
-function enter() {
-  if (entering) return;
-  entering = true;
-  if (reduced) { window.location.href = '/experience.html'; return; }
-  $('enterWipe').classList.add('covering');
-  setTimeout(() => { window.location.href = '/experience.html'; }, 800);
-}
-$('beginBtn').addEventListener('click', enter);
-$('beginBtn2').addEventListener('click', enter);
+/* ============ BEGIN → the flow (capture → reveal → reserve) ============ */
+// No navigation: the flow plays out in this same persistent world, so the
+// bracelet you've been watching is the one that becomes yours.
+const flow = createFlow({ stage, iris, bracelet, sceneState, lenis, master, reduced });
+$('beginBtn').addEventListener('click', flow.enter);
+$('beginBtn2').addEventListener('click', flow.enter);
 
 window.addEventListener('load', () => ScrollTrigger.refresh());
 
