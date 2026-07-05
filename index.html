@@ -88,12 +88,29 @@
       <svg class="focus-petal draw" id="focusPetalDraw" viewBox="-110 -110 220 220" aria-hidden="true"></svg>
     </div>
 
+    <!-- STEP 0 — how many bracelets? One scan per bracelet follows. -->
+    <section class="flow-stage" id="countStage" hidden>
+      <svg class="intro-petal" id="countPetal" viewBox="-110 -110 220 220" aria-hidden="true"></svg>
+      <div class="flow-copy">
+        <p class="eyebrow">BEFORE WE BEGIN</p>
+        <h2 class="display sm">How many <em>bracelets</em>?</h2>
+        <p class="sub">Each one is matched to a different eye — yours, or someone close.</p>
+        <div class="count-select" id="countSelect" aria-label="Number of bracelets">
+          <button class="count" data-count="1"><span class="count-num">1</span><span class="count-note">just you</span></button>
+          <button class="count" data-count="2"><span class="count-num">2</span><span class="count-note">a pair</span></button>
+          <button class="count" data-count="3"><span class="count-num">3</span><span class="count-note">a trio</span></button>
+          <button class="count" data-count="4"><span class="count-num">4</span><span class="count-note">a circle</span></button>
+        </div>
+        <p class="micro">Two or more ship together — 10% off the set.</p>
+      </div>
+    </section>
+
     <!-- STEP 1a — the front door: a calm, unhurried choice -->
-    <section class="flow-stage" id="captureIntro">
+    <section class="flow-stage" id="captureIntro" hidden>
       <svg class="intro-petal" id="introPetal" viewBox="-110 -110 220 220" aria-hidden="true"></svg>
       <div class="flow-copy">
-        <p class="eyebrow">STEP ONE</p>
-        <h2 class="display sm">Let's find your <em>color</em>.</h2>
+        <p class="eyebrow" id="captureEyebrow">STEP ONE</p>
+        <h2 class="display sm" id="captureTitle">Let's find your <em>color</em>.</h2>
         <p class="sub" id="captureSub">Take a photo of your eye — or upload one you already have.</p>
         <div class="flow-actions">
           <button class="cta" id="useCameraBtn">USE MY CAMERA</button>
@@ -132,8 +149,8 @@
       </div>
     </section>
 
-    <!-- STEP 2b — purchase: bracelet owns the top half; each concern
-         (identity · customization · purchase) gets its own breathing zone. -->
+    <!-- STEP 3 — purchase: every bracelet in the order, one price, one buy.
+         The matched bracelet owns the top (mobile) / left (desktop). -->
     <section class="flow-stage configure-stage" id="reserveStage" hidden>
       <!-- dedicated hero space: the large matched bracelet renders here -->
       <div class="config-hero" aria-hidden="true"></div>
@@ -141,11 +158,12 @@
         <div class="configure-panel">
 
           <div class="zone zone-identity">
-            <p class="eyebrow">YOUR EYEMATCH BRACELET</p>
+            <p class="eyebrow" id="reserveEyebrow">YOUR EYEMATCH BRACELET</p>
             <h2 class="reveal-name sm"><em id="reserveStoneName">&nbsp;</em></h2>
           </div>
 
-          <div class="zone zone-custom">
+          <!-- single bracelet: one size choice -->
+          <div class="zone zone-custom" id="sizeZone">
             <p class="zone-label">WRIST SIZE</p>
             <div class="opt-row" id="sizeOptions">
               <button class="opt" data-size="S">S</button>
@@ -155,52 +173,23 @@
             <p class="hint">S ≈ 14–15cm · M ≈ 15–17cm · L ≈ 17–19cm. Unsure? M fits most.</p>
           </div>
 
-          <div class="zone zone-purchase">
-            <div class="price-block"><span class="price" id="priceVal">$49</span></div>
-            <button class="cta solid full" id="checkoutBtn">CHECKOUT</button>
-            <button class="add-invite" id="addBraceletBtn">
-              <span class="add-invite-icon">+</span>
-              <span class="add-invite-copy">
-                <span class="add-invite-title">Add another bracelet</span>
-                <span class="add-invite-sub">For someone close — a partner, a parent, a friend. Ships together, 10% off.</span>
-              </span>
-            </button>
-            <button class="text-link" id="reserveBackBtn">← back to your stone</button>
+          <!-- multiple bracelets: each one listed with its stone + size -->
+          <div class="zone zone-order" id="orderZone" hidden>
+            <div class="order-list" id="orderList"></div>
+            <p class="hint">S ≈ 14–15cm · M ≈ 15–17cm · L ≈ 17–19cm. Unsure? M fits most.</p>
           </div>
-
-        </div>
-      </div>
-    </section>
-
-    <!-- STEP 3 — the collection: every bracelet, together. A set, not a cart. -->
-    <section class="flow-stage collection-stage" id="collectionStage" hidden>
-      <div class="collection-hero" aria-hidden="true"></div>
-      <div class="collection-sheet">
-        <div class="collection-panel">
-          <div class="zone zone-identity">
-            <p class="eyebrow" id="collectionEyebrow">YOUR SET</p>
-            <h2 class="display sm" id="collectionTitle">Worn apart, <em>matched always</em>.</h2>
-            <p class="sub" id="collectionSub">Two eyes, two stones — one quiet thread between them.</p>
-          </div>
-
-          <div class="collection-list" id="collectionList"></div>
 
           <div class="zone zone-purchase">
             <div class="price-block">
-              <span class="price-was" id="setPriceWas"></span>
-              <span class="price" id="setPrice">$49</span>
-              <span class="price-save" id="setSave"></span>
+              <span class="price-was" id="priceWas"></span>
+              <span class="price" id="priceVal">$49</span>
+              <span class="price-save" id="priceSave"></span>
             </div>
-            <button class="cta solid full" id="setCheckoutBtn">CHECKOUT</button>
-            <button class="add-invite slim" id="addAnotherBtn">
-              <span class="add-invite-icon">+</span>
-              <span class="add-invite-copy">
-                <span class="add-invite-title">Add another bracelet</span>
-              </span>
-            </button>
-            <p class="purchase-note">Secure checkout. Your eye photos are never stored.</p>
-            <button class="text-link" id="collectionBackBtn">← back</button>
+            <button class="cta solid full" id="checkoutBtn">CHECKOUT</button>
+            <p class="purchase-note">Secure checkout. Your eye photos never leave your device.</p>
+            <button class="text-link" id="reserveBackBtn">← back to your stone</button>
           </div>
+
         </div>
       </div>
     </section>

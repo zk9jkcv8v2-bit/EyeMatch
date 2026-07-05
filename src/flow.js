@@ -23,25 +23,25 @@ export function createFlow(ctx) {
   const flash = $('flash');
 
   const stages = {
+    count: $('countStage'),
     captureIntro: $('captureIntro'),
     captureLive: $('captureLive'),
     reveal: $('revealStage'),
     configure: $('reserveStage'),
-    collection: $('collectionStage'),
   };
 
-  // The set is built live: each reveal pushes a bracelet; `current` is the one
-  // being revealed / configured (always the last member, edited by reference).
-  const state = { entered: false, captured: false, set: [], current: null };
+  // The order is decided up front: `target` bracelets, one scan each.
+  // `set` fills as scans complete; `current` is the one being revealed.
+  const state = { entered: false, captured: false, target: 1, set: [], current: null };
   let holdTween = null;
 
   const PATTERNS = ['dusk', 'cadence', 'wild'];
-  const BUNDLE_DISCOUNT = 0.10; // a quiet 10% off when more than one is matched
+  const BUNDLE_DISCOUNT = 0.10; // a quiet 10% off for sets of two or more
 
-  // Exclusive backdrop modes (capturing | purchasing | collection); live/reading
-  // are additive on top of capturing.
+  // Exclusive backdrop modes (capturing | purchasing); live/reading are
+  // additive on top of capturing.
   function setMode(mode) {
-    flow.classList.remove('capturing', 'purchasing', 'collection');
+    flow.classList.remove('capturing', 'purchasing');
     if (mode) flow.classList.add(mode);
   }
 
@@ -60,6 +60,7 @@ export function createFlow(ctx) {
     $('focusPetalBg').innerHTML = `<path d="${d}"/>`;
     $('focusPetalDraw').innerHTML = `<path d="${d}" pathLength="1"/>`;
     $('introPetal').innerHTML = `<path d="${d}"/>`;
+    $('countPetal').innerHTML = `<path d="${d}"/>`;
   })();
   const drawPath = $('focusPetalDraw').querySelector('path');
   const resetDrawPetal = () => gsap.set(drawPath, { strokeDasharray: 1, strokeDashoffset: 1 });
@@ -95,7 +96,7 @@ export function createFlow(ctx) {
 
   /* ============ ENTER — leave the scroll story, open capture ============ */
   function enter() {
-    if (state.entered) return;
+    if (state.entered) return Promise.resolve();
     state.entered = true;
 
     // Freeze the scroll story so it stops driving the shared iris/bracelet.
@@ -103,7 +104,7 @@ export function createFlow(ctx) {
     ctx.master?.kill();
     ctx.lenis?.stop();
 
-    coverWipe().then(() => {
+    return coverWipe().then(() => {
       document.body.style.overflow = 'hidden';
       window.scrollTo(0, 0);
       const scroll = $('scroll');
@@ -111,13 +112,37 @@ export function createFlow(ctx) {
 
       flow.classList.add('active');
       flow.setAttribute('aria-hidden', 'false');
-      enterCapture();
+      enterCount();
       uncoverWipe();
-      gsap.from('#captureIntro .flow-copy > *', {
+      gsap.from('#countStage .flow-copy > *', {
         opacity: 0, y: 20, duration: 1.0, ease: 'power3.out', stagger: 0.12, delay: 0.2,
       });
     });
   }
+
+  /* ============ STEP 0 — how many bracelets? ============ */
+  function enterCount() {
+    setMode('capturing');
+    flow.classList.remove('live', 'reading');
+    show(stages.count);
+    hide(stages.captureIntro);
+    hide(stages.captureLive);
+    hide(stages.reveal);
+    hide(stages.configure);
+  }
+
+  $('countSelect').addEventListener('click', async (e) => {
+    const btn = e.target.closest('.count');
+    if (!btn) return;
+    state.target = Math.min(4, Math.max(1, parseInt(btn.dataset.count, 10) || 1));
+    state.set = [];
+    state.current = null;
+    document.querySelectorAll('#countSelect .count')
+      .forEach((b) => b.classList.toggle('active', b === btn));
+    await coverWipe();
+    enterCapture();
+    uncoverWipe();
+  });
 
   /* ============ STEP 1 — capture ============ */
   const scanner = new Scanner({
@@ -132,14 +157,28 @@ export function createFlow(ctx) {
     setMode('capturing');
     flow.classList.remove('live', 'reading');
     camVideo.classList.remove('live');
+    hide(stages.count);
     show(stages.captureIntro);
     hide(stages.captureLive);
     hide(stages.reveal);
     hide(stages.configure);
-    hide(stages.collection);
-    $('captureSub').textContent = state.set.length > 0
-      ? 'Another eye, another stone — take a photo or upload one.'
-      : 'Take a photo of your eye — or upload one you already have.';
+
+    const nth = state.set.length + 1;
+    if (state.target > 1) {
+      $('captureEyebrow').textContent = `BRACELET ${nth} OF ${state.target}`;
+      $('captureTitle').innerHTML = nth === 1
+        ? "Let's find the first <em>color</em>."
+        : nth === state.target
+          ? 'One last <em>eye</em>.'
+          : 'The next <em>eye</em>.';
+      $('captureSub').textContent = nth === 1
+        ? 'Take a photo of the first eye — or upload one you already have.'
+        : 'Another eye, another stone — take a photo or upload one.';
+    } else {
+      $('captureEyebrow').textContent = 'STEP ONE';
+      $('captureTitle').innerHTML = "Let's find your <em>color</em>.";
+      $('captureSub').textContent = 'Take a photo of your eye — or upload one you already have.';
+    }
   }
 
   $('useCameraBtn').addEventListener('click', () => {
@@ -237,12 +276,21 @@ export function createFlow(ctx) {
     flow.classList.remove('live');
     camVideo.classList.remove('live');
     scanner.stop();
+    hide(stages.count);
     hide(stages.captureIntro);
     hide(stages.captureLive);
     hide(stages.configure);
-    hide(stages.collection);
     show(stages.reveal);
     syncPattern(state.current.pattern); // selectors + the (default Dusk) arrangement
+
+    // Progress-aware copy: mid-set reveals hand off to the next scan.
+    const remaining = state.target - state.set.length;
+    $('revealEyebrow').textContent = state.target > 1
+      ? `BRACELET ${state.set.length} OF ${state.target} · ITS STONE`
+      : 'YOUR STONE';
+    $('reserveBtn').textContent = remaining > 0
+      ? 'SCAN THE NEXT EYE'
+      : state.target > 1 ? 'SEE YOUR SET' : 'MAKE IT YOURS';
 
     gsap.killTweensOf([iris.uniforms.uAlpha, iris.uniforms.uDissolve, iris, ...bracelet.gems.map((g) => g.scale)]);
 
@@ -353,36 +401,101 @@ export function createFlow(ctx) {
     });
   }
 
+  const SET_NAMES = { 2: 'A matched pair', 3: 'A matched trio', 4: 'A matched circle' };
+
+  // One row per bracelet in the order: its stones, its name, its size.
+  function renderOrder() {
+    const list = $('orderList');
+    list.innerHTML = '';
+    state.set.forEach((member, idx) => {
+      const row = document.createElement('div');
+      row.className = 'set-member';
+
+      const strand = document.createElement('div');
+      strand.className = 'set-strand';
+      member.match.gems.forEach((c) => {
+        const s = document.createElement('span');
+        s.style.background = swatchGradient(c);
+        strand.appendChild(s);
+      });
+
+      const meta = document.createElement('div');
+      meta.className = 'set-meta';
+      const name = document.createElement('p');
+      name.className = 'set-stone';
+      name.innerHTML = `<em>${member.match.stone}</em><span class="set-pattern">Nº ${idx + 1}</span>`;
+
+      const sizes = document.createElement('div');
+      sizes.className = 'opt-row mini';
+      ['S', 'M', 'L'].forEach((sz) => {
+        const b = document.createElement('button');
+        b.className = 'opt' + (member.size === sz ? ' active' : '');
+        b.textContent = sz;
+        b.addEventListener('click', () => {
+          member.size = sz;
+          sizes.querySelectorAll('.opt').forEach((o) => o.classList.remove('active'));
+          b.classList.add('active');
+        });
+        sizes.appendChild(b);
+      });
+
+      meta.appendChild(name);
+      meta.appendChild(sizes);
+      row.appendChild(strand);
+      row.appendChild(meta);
+      list.appendChild(row);
+    });
+  }
+
   function enterConfigure() {
     const cur = state.current;
     if (!cur) return;
+    const n = state.set.length;
     setMode('purchasing');
     flow.classList.remove('live');
     hide(stages.reveal);
-    hide(stages.collection);
     show(stages.configure);
     poseConfigure();
 
-    $('reserveStoneName').textContent = cur.match.stone;
-    document.querySelectorAll('#sizeOptions .opt')
-      .forEach((o) => o.classList.toggle('active', o.dataset.size === cur.size));
     // Carry the chosen arrangement through so the matched bracelet renders right.
     bracelet.pattern = cur.pattern;
     bracelet.setArrangement(cur.pattern);
 
-    $('priceVal').textContent = fmtPrice(config.checkout.price);
-    // Once there's more than one bracelet, CHECKOUT first gathers the set.
-    $('checkoutBtn').textContent = state.set.length > 1 ? 'REVIEW YOUR SET' : 'CHECKOUT';
+    if (n > 1) {
+      $('reserveEyebrow').textContent = 'YOUR EYEMATCH SET';
+      $('reserveStoneName').textContent = SET_NAMES[n] || `A set of ${n}`;
+      hide($('sizeZone'));
+      show($('orderZone'));
+      renderOrder();
+    } else {
+      $('reserveEyebrow').textContent = 'YOUR EYEMATCH BRACELET';
+      $('reserveStoneName').textContent = cur.match.stone;
+      show($('sizeZone'));
+      hide($('orderZone'));
+      document.querySelectorAll('#sizeOptions .opt')
+        .forEach((o) => o.classList.toggle('active', o.dataset.size === cur.size));
+    }
 
-    gsap.fromTo('#reserveStage .zone',
+    // One combined price; sets of 2+ get the bundle discount, shown plainly.
+    const full = config.checkout.price * n;
+    const total = n > 1 ? Math.round(full * (1 - BUNDLE_DISCOUNT)) : full;
+    $('priceWas').textContent = n > 1 ? fmtPrice(full) : '';
+    $('priceVal').textContent = fmtPrice(total);
+    $('priceSave').textContent = n > 1
+      ? `Set of ${n} · ${Math.round(BUNDLE_DISCOUNT * 100)}% off`
+      : '';
+
+    gsap.fromTo('#reserveStage .zone:not([hidden]), #reserveStage .set-member',
       { y: 18, opacity: 0 },
       { y: 0, opacity: 1, duration: 0.7, ease: 'power3.out', stagger: 0.08 });
   }
 
-  $('reserveBtn').addEventListener('click', async () => {   // MAKE IT YOURS
+  // Primary reveal CTA: mid-set → next scan; done → the purchase screen.
+  $('reserveBtn').addEventListener('click', async () => {
     if (!state.current) return;
     await coverWipe();
-    enterConfigure();
+    if (state.set.length < state.target) enterCapture();
+    else enterConfigure();
     uncoverWipe();
   });
 
@@ -405,126 +518,7 @@ export function createFlow(ctx) {
     if (state.current) state.current.size = btn.dataset.size;
   });
 
-  // Build a set — add another bracelet (the current one stays committed).
-  $('addBraceletBtn').addEventListener('click', async () => {
-    await coverWipe();
-    enterCapture();
-    uncoverWipe();
-  });
-
-  // CHECKOUT from configure: one bracelet → straight to purchase; a set →
-  // review them together first.
-  $('checkoutBtn').addEventListener('click', async () => {
-    if (state.set.length > 1) {
-      await coverWipe();
-      enterCollection();
-      uncoverWipe();
-    } else {
-      purchase();
-    }
-  });
-
-  /* ============ STEP 3 — the collection: a set, not a cart ============ */
-  function setCopy() {
-    const n = state.set.length;
-    if (n <= 1) {
-      $('collectionEyebrow').textContent = 'YOUR PIECE';
-      $('collectionTitle').innerHTML = 'Yours, and yours <em>alone</em>.';
-      $('collectionSub').textContent = 'One eye, one stone — no other like it in the world.';
-    } else if (n === 2) {
-      $('collectionEyebrow').textContent = 'YOUR SET';
-      $('collectionTitle').innerHTML = 'Worn apart, <em>matched always</em>.';
-      $('collectionSub').textContent = 'Two eyes, two stones — one quiet thread between them.';
-    } else {
-      $('collectionEyebrow').textContent = 'YOUR SET';
-      $('collectionTitle').innerHTML = 'Many eyes, <em>one circle</em>.';
-      $('collectionSub').textContent = 'Each stone its own — together, a constellation that’s yours.';
-    }
-  }
-
-  function renderCollection() {
-    const list = $('collectionList');
-    list.innerHTML = '';
-    state.set.forEach((member) => {
-      const row = document.createElement('div');
-      row.className = 'set-member';
-
-      const strand = document.createElement('div');
-      strand.className = 'set-strand';
-      member.match.gems.forEach((c) => {
-        const s = document.createElement('span');
-        s.style.background = swatchGradient(c);
-        strand.appendChild(s);
-      });
-
-      const meta = document.createElement('div');
-      meta.className = 'set-meta';
-      const name = document.createElement('p');
-      name.className = 'set-stone';
-      name.innerHTML = `<em>${member.match.stone}</em><span class="set-pattern">${member.pattern}</span>`;
-
-      const sizes = document.createElement('div');
-      sizes.className = 'opt-row mini';
-      ['S', 'M', 'L'].forEach((sz) => {
-        const b = document.createElement('button');
-        b.className = 'opt' + (member.size === sz ? ' active' : '');
-        b.dataset.size = sz;
-        b.textContent = sz;
-        b.addEventListener('click', () => {
-          member.size = sz;
-          sizes.querySelectorAll('.opt').forEach((o) => o.classList.remove('active'));
-          b.classList.add('active');
-        });
-        sizes.appendChild(b);
-      });
-
-      meta.appendChild(name);
-      meta.appendChild(sizes);
-      row.appendChild(strand);
-      row.appendChild(meta);
-      list.appendChild(row);
-    });
-  }
-
-  function enterCollection() {
-    setMode('collection');
-    flow.classList.remove('live');
-    hide(stages.reveal);
-    hide(stages.configure);
-    show(stages.collection);
-
-    setCopy();
-    renderCollection();
-
-    // Bundle pricing: full total struck through, the quiet discount applied.
-    const n = state.set.length;
-    const full = config.checkout.price * n;
-    const total = n > 1 ? Math.round(full * (1 - BUNDLE_DISCOUNT)) : full;
-    $('setPriceWas').textContent = n > 1 ? fmtPrice(full) : '';
-    $('setPrice').textContent = fmtPrice(total);
-    $('setSave').textContent = n > 1
-      ? `Set of ${n} · ${Math.round(BUNDLE_DISCOUNT * 100)}% off`
-      : '';
-
-    gsap.fromTo('#collectionStage .zone, #collectionStage .set-member',
-      { y: 18, opacity: 0 },
-      { y: 0, opacity: 1, duration: 0.7, ease: 'power3.out', stagger: 0.07 });
-  }
-
-  $('addAnotherBtn').addEventListener('click', async () => {
-    await coverWipe();
-    enterCapture();
-    uncoverWipe();
-  });
-
-  $('collectionBackBtn').addEventListener('click', async () => {
-    state.current = state.set[state.set.length - 1];
-    await coverWipe();
-    enterConfigure();
-    uncoverWipe();
-  });
-
-  $('setCheckoutBtn').addEventListener('click', () => purchase());
+  $('checkoutBtn').addEventListener('click', () => purchase());
 
   /* ============ direct purchase — hand off to Stripe checkout ============ */
   // No reservation, no waitlist: CHECKOUT opens the secure Stripe checkout for
@@ -539,13 +533,29 @@ export function createFlow(ctx) {
     console.warn('[EyeMatch] No Stripe Payment Link configured — set config.checkout.paymentLinks to enable checkout.');
   }
 
-  // Dev hook: build a set quickly without a camera.
+  // Dev hooks: build an order quickly without a camera. Both await the enter
+  // transition so its stage-switch can't land on top of theirs.
   window.__flow = {
-    simulate: (hex = '#7a5a32') => {
-      if (!state.entered) enter();
+    simulate: async (hex = '#7a5a32') => {
+      await enter();
+      if (state.set.length >= state.target) { state.target = state.set.length + 1; }
       state.current = { match: buildMatch(hexToHsl(hex)), pattern: 'dusk', size: 'M' };
       state.set.push(state.current);
       reveal();
+    },
+    simulateSet: async (hexes = ['#5a7fa0', '#6b7f4f']) => {
+      await enter();
+      state.target = hexes.length;
+      state.set = hexes.map((hex) => ({ match: buildMatch(hexToHsl(hex)), pattern: 'dusk', size: 'M' }));
+      state.current = state.set[state.set.length - 1];
+      bracelet.setColors(state.current.match.gems);
+      bracelet.gems.forEach((g) => g.scale.setScalar(g.userData.baseScale));
+      bracelet.group.rotation.set(-1.02, 0, 0);
+      sceneState.spin = true;
+      hide(stages.count);
+      hide(stages.captureIntro);
+      hide(stages.captureLive);
+      enterConfigure();
     },
     enter, reveal, state,
   };
