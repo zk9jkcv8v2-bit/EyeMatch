@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+// Arrangement math is shared with the physical-bracelet recipe engine
+// (domain/recipe.js) so the render and the buildable spec can never diverge.
+import { colorIndexFor } from '../domain/patterns.js';
 
 // Polished natural-gemstone bead bracelet. Each stone uses a soft, cloudy
 // grayscale mineral texture (translucent depth, gentle veining — no harsh
@@ -68,23 +71,6 @@ function toColors(palette) {
 }
 
 const smooth = (f) => f * f * (3 - 2 * f);
-
-const TAU = Math.PI * 2;
-
-// Which palette colour (0 = lightest … n-1 = darkest) sits on bead `i`, under a
-// named arrangement. The palette from buildMatch is already ordered light→dark.
-function colorIndexFor(pattern, i, count, n) {
-  if (pattern === 'cadence') return i % n;            // a steady repeating rhythm
-  if (pattern === 'wild') {                            // scattered, but every hue used
-    const h = Math.sin(i * 12.9898 + 4.1414) * 43758.5453;
-    return Math.floor((h - Math.floor(h)) * n) % n;
-  }
-  // 'dusk' — a seamless vertical gradient: lightest at the top of the wrist,
-  // darkest at the bottom, mirrored on both sides so there is no seam.
-  const ang = (i / count) * TAU;
-  const s = (Math.sin(ang) + 1) / 2;                   // 1 at top → 0 at bottom
-  return Math.round((1 - s) * (n - 1));
-}
 
 export class Bracelet {
   constructor({ count = 24, radius = 1.02, slots = 5, shiftPalettes = [] } = {}) {

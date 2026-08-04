@@ -10,6 +10,8 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { config, petalEdge } from './config.js';
 import { Scanner, extractIrisColor, buildMatch, hexToHsl } from './scan.js';
+import { ARRANGEMENTS } from './domain/patterns.js';
+import { buildDesign, newDesignId } from './domain/recipe.js';
 
 const $ = (id) => document.getElementById(id);
 const show = (el) => { el.hidden = false; };
@@ -35,8 +37,35 @@ export function createFlow(ctx) {
   const state = { entered: false, captured: false, target: 1, set: [], current: null };
   let holdTween = null;
 
-  const PATTERNS = ['dusk', 'cadence', 'wild'];
   const BUNDLE_DISCOUNT = 0.10; // a quiet 10% off for sets of two or more
+
+  // Every bracelet in the set carries a complete, serializable BraceletDesign
+  // (domain/recipe.js): matched physical bead SKUs, sequence, quantities. The
+  // designId is minted once per scan and stays stable while the customer edits
+  // pattern/size; the recipe re-derives around it. Client-side only for now —
+  // nothing is persisted or transmitted.
+  function refreshDesign(member) {
+    member.design = buildDesign({
+      match: member.match,
+      arrangement: member.pattern,
+      size: member.size,
+      designId: member.design?.designId,
+    });
+    if (import.meta.env.DEV) {
+      console.info(`[EyeMatch] design ${member.design.designId}`, member.design);
+    }
+  }
+  function makeMember(match) {
+    const member = { match, pattern: 'dusk', size: 'M', design: null };
+    member.design = buildDesign({
+      match, arrangement: member.pattern, size: member.size,
+      designId: newDesignId(match.stone),
+    });
+    if (import.meta.env.DEV) {
+      console.info(`[EyeMatch] design ${member.design.designId}`, member.design);
+    }
+    return member;
+  }
 
   // Exclusive backdrop modes (capturing | purchasing); live/reading are
   // additive on top of capturing.
@@ -260,7 +289,8 @@ export function createFlow(ctx) {
         const hsl = extractIrisColor($('captureCanvas'));
         const match = buildMatch(hsl ?? { h: 210, s: 0.28, l: 0.45 });
         // A new bracelet joins the set; it becomes the one we reveal & configure.
-        state.current = { match, pattern: 'dusk', size: 'M' };
+        // makeMember also builds its physical BraceletDesign (bead SKUs, sequence).
+        state.current = makeMember(match);
         state.set.push(state.current);
       })
       .to(flash, { opacity: 0, duration: 0.55, ease: 'power2.out' }, '+=0.05')
@@ -357,14 +387,17 @@ export function createFlow(ctx) {
 
   /* ============ stone arrangement (the "mood" patterns) ============ */
   function syncPattern(id) {
-    if (state.current) state.current.pattern = id;
+    if (state.current) {
+      state.current.pattern = id;
+      refreshDesign(state.current); // keep the recipe in step with the render
+    }
     bracelet.setArrangement(id);
     document.querySelectorAll('#revealPattern .pattern')
       .forEach((b) => b.classList.toggle('active', b.dataset.pattern === id));
   }
   function onPatternClick(e) {
     const btn = e.target.closest('.pattern');
-    if (!btn || !PATTERNS.includes(btn.dataset.pattern)) return;
+    if (!btn || !ARRANGEMENTS.includes(btn.dataset.pattern)) return;
     syncPattern(btn.dataset.pattern);
   }
   // Pattern is chosen on the reveal screen only — not repeated on purchase.
@@ -433,6 +466,7 @@ export function createFlow(ctx) {
         b.textContent = sz;
         b.addEventListener('click', () => {
           member.size = sz;
+          refreshDesign(member);
           sizes.querySelectorAll('.opt').forEach((o) => o.classList.remove('active'));
           b.classList.add('active');
         });
@@ -515,7 +549,10 @@ export function createFlow(ctx) {
     if (!btn) return;
     document.querySelectorAll('#sizeOptions .opt').forEach((o) => o.classList.remove('active'));
     btn.classList.add('active');
-    if (state.current) state.current.size = btn.dataset.size;
+    if (state.current) {
+      state.current.size = btn.dataset.size;
+      refreshDesign(state.current);
+    }
   });
 
   $('checkoutBtn').addEventListener('click', () => purchase());
@@ -539,14 +576,14 @@ export function createFlow(ctx) {
     simulate: async (hex = '#7a5a32') => {
       await enter();
       if (state.set.length >= state.target) { state.target = state.set.length + 1; }
-      state.current = { match: buildMatch(hexToHsl(hex)), pattern: 'dusk', size: 'M' };
+      state.current = makeMember(buildMatch(hexToHsl(hex)));
       state.set.push(state.current);
       reveal();
     },
     simulateSet: async (hexes = ['#5a7fa0', '#6b7f4f']) => {
       await enter();
       state.target = hexes.length;
-      state.set = hexes.map((hex) => ({ match: buildMatch(hexToHsl(hex)), pattern: 'dusk', size: 'M' }));
+      state.set = hexes.map((hex) => makeMember(buildMatch(hexToHsl(hex))));
       state.current = state.set[state.set.length - 1];
       bracelet.setColors(state.current.match.gems);
       bracelet.gems.forEach((g) => g.scale.setScalar(g.userData.baseScale));
@@ -557,6 +594,8 @@ export function createFlow(ctx) {
       hide(stages.captureLive);
       enterConfigure();
     },
+    // Inspect the complete recipe for every bracelet in the order.
+    designs: () => state.set.map((m) => m.design),
     enter, reveal, state,
   };
 
