@@ -52,11 +52,40 @@ future order/fulfillment process will reference; the recipe itself is the
 source of truth. Inspect live designs in the console via
 `__flow.designs()`.
 
-**⚠️ The bead inventory is a development placeholder.** Real physical beads
-have not been selected; `src/domain/inventory.js` ships stand-in `EM-DEV-*`
-SKUs derived from the site's on-screen palettes. Replace that catalog (and the
-placeholder 8 mm diameter + 24-bead size fallback in `src/domain/sizes.js`)
-with confirmed supplier data before any real order is taken.
+### Physical Inventory V1
+
+EyeMatch Physical Inventory V1 consists of **six internal bead families:
+`B001`–`B006`**, all nominally **6 mm** round, polished
+(`src/domain/inventory.js`):
+
+| SKU | Family | Serves |
+| --- | --- | --- |
+| B001 | grey-taupe (high variation) | grey, brown, hazel |
+| B002 | light-green | green, hazel |
+| B003 | blue-grey | blue, grey |
+| B004 | muted-green | green, hazel, grey |
+| B005 | champagne | hazel, golden highlights, brown |
+| B006 | taupe-brown-veined (high variation) | brown, hazel, grey/brown details |
+
+Important properties of this catalog:
+
+- **SKU identity is intentionally decoupled from supplier identity.** B001–B006
+  name visual/material families that EyeMatch controls; `supplierRef` is null
+  and the same SKU may later be sourced elsewhere if visually close enough.
+- **No exact mineral identities are claimed** — supplier information is not
+  reliable enough to verify them.
+- **Representative hex colors are approximate V1 calibration values**, chosen
+  to sit near the centre of each family's visual range. They may be
+  recalibrated after controlled physical color measurement — recalibration
+  must never change SKU identity.
+- **Natural variation exists within families** (recorded per-bead as
+  `variation: low|medium|high` + an appearance description); fulfillment
+  selects visually appropriate individual beads from the requested family.
+- Stock quantities are deliberately not modelled — that belongs to a future
+  order/operations layer.
+
+Still placeholder: the 24-bead-per-size fallback in `src/domain/sizes.js`
+(final S/M/L circumference and bead counts are open decisions).
 
 ## Privacy boundary
 

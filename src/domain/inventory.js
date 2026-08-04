@@ -1,63 +1,114 @@
 // ============================================================================
-// PHYSICAL BEAD INVENTORY
+// EYEMATCH PHYSICAL INVENTORY — V1
 //
-// ⚠️⚠️⚠️  DEVELOPMENT PLACEHOLDER — NOT REAL SUPPLIER DATA  ⚠️⚠️⚠️
+// Six real bead families that EyeMatch physically owns, all nominally 6 mm
+// round, polished. SKUs B001–B006 are EYEMATCH-CONTROLLED identifiers:
+// they name a visual/material family, NOT a supplier product. The same SKU
+// may later be sourced from a different supplier if the replacement bead is
+// visually close enough — that is why supplierRef is intentionally null and
+// why no geological/mineral names are claimed anywhere (current supplier
+// information is not reliable enough to verify material identity).
 //
-// EyeMatch has NOT yet selected its real physical beads. Every entry below is
-// a stand-in derived from the site's existing on-screen colour palettes so the
-// matching / recipe architecture can be built and tested end-to-end.
+// ⚠️ REPRESENTATIVE COLORS ARE APPROXIMATE V1 CALIBRATION VALUES.
+// They were chosen by eye from the product descriptions to sit near the
+// CENTER of each family's visual range — they are NOT laboratory-measured.
+// Beads inside a family vary naturally (see `variation`); fulfillment picks
+// visually appropriate individual beads from the requested family. After a
+// controlled physical color calibration, update `hex` in place — SKU
+// identity must never change when colors are recalibrated.
 //
-//   - SKUs are prefixed "EM-DEV-" and MUST NOT appear on a real order.
-//   - `supplierRef` is null everywhere because no supplier exists yet.
-//   - `diameterMm: 8` is a TEMPORARY assumption (a common bracelet bead size),
-//     not a confirmed spec.
-//
-// TO GO LIVE: replace BEAD_INVENTORY with the confirmed catalog (real SKUs,
-// supplier refs, measured hex from product photography, confirmed diameters)
-// and set INVENTORY_STATUS to 'PRODUCTION'. Nothing else in the app should
-// need to change — matching and recipes only read this list.
+// Stock quantities are deliberately NOT modelled here. This catalog defines
+// WHICH families exist; counting what's in the box belongs to a future
+// order/operations layer.
 // ============================================================================
 
-export const INVENTORY_STATUS = 'DEVELOPMENT_PLACEHOLDER';
+export const INVENTORY_STATUS = 'PHYSICAL_V1_APPROXIMATE_COLORS';
 
-// Shape of a bead record (the contract the rest of the app relies on):
-//   sku          string  — unique stable identifier, used in recipes/orders
-//   name         string  — human-readable display name
-//   hex          string  — representative colour '#rrggbb' (match target)
-//   material     string  — stone/material name
-//   supplierRef  string|null — supplier's own item code, when known
-//   diameterMm   number  — bead diameter in millimetres
-//   active       boolean — only active beads may ever be matched/sold
+// Bead record contract (what the rest of the app relies on):
+//   sku          string       — EyeMatch-controlled stable identifier (B001…)
+//   name         string       — human-readable family name (no mineral claims)
+//   family       string       — short family slug
+//   hex          string       — representative colour '#rrggbb' (match target;
+//                               approximate — see calibration note above)
+//   variation    'low'|'medium'|'high' — natural spread within the family
+//   appearance   string       — textual description for humans/fulfillment
+//   usefulFor    string[]     — eye categories this family tends to serve
+//   supplierRef  string|null  — unknown for V1; SKU identity is supplier-independent
+//   diameterMm   number       — nominal bead diameter
+//   active       boolean      — only active beads may ever be matched/sold
 export const BEAD_INVENTORY = [
-  // --- blue family (placeholder hexes from the landing's blue palette) ---
-  { sku: 'EM-DEV-BLU-01', name: 'Sky Aquamarine (DEV)', hex: '#a6c4d6', material: 'Aquamarine', supplierRef: null, diameterMm: 8, active: true },
-  { sku: 'EM-DEV-BLU-02', name: 'Aquamarine (DEV)', hex: '#7ba3c0', material: 'Aquamarine', supplierRef: null, diameterMm: 8, active: true },
-  { sku: 'EM-DEV-BLU-03', name: 'Sodalite (DEV)', hex: '#4f7896', material: 'Sodalite', supplierRef: null, diameterMm: 8, active: true },
-  { sku: 'EM-DEV-BLU-04', name: 'Blue Chalcedony (DEV)', hex: '#5f87a6', material: 'Chalcedony', supplierRef: null, diameterMm: 8, active: true },
-
-  // --- green family ---
-  { sku: 'EM-DEV-GRN-01', name: 'Pale Jade (DEV)', hex: '#9fbf9a', material: 'Jade', supplierRef: null, diameterMm: 8, active: true },
-  { sku: 'EM-DEV-GRN-02', name: 'Jade (DEV)', hex: '#74a075', material: 'Jade', supplierRef: null, diameterMm: 8, active: true },
-  { sku: 'EM-DEV-GRN-03', name: 'Aventurine (DEV)', hex: '#4f7857', material: 'Aventurine', supplierRef: null, diameterMm: 8, active: true },
-
-  // --- hazel / golden family ---
-  { sku: 'EM-DEV-HAZ-01', name: 'Amber (DEV)', hex: '#c2a878', material: 'Amber', supplierRef: null, diameterMm: 8, active: true },
-  { sku: 'EM-DEV-HAZ-02', name: 'Golden Tiger Eye (DEV)', hex: '#a08049', material: 'Tiger Eye', supplierRef: null, diameterMm: 8, active: true },
-  { sku: 'EM-DEV-HAZ-03', name: 'Bronzite (DEV)', hex: '#7a6038', material: 'Bronzite', supplierRef: null, diameterMm: 8, active: true },
-
-  // --- brown family ---
-  { sku: 'EM-DEV-BRN-01', name: 'Citrine (DEV)', hex: '#b08a5a', material: 'Citrine', supplierRef: null, diameterMm: 8, active: true },
-  { sku: 'EM-DEV-BRN-02', name: 'Tiger Eye (DEV)', hex: '#8a6638', material: 'Tiger Eye', supplierRef: null, diameterMm: 8, active: true },
-  { sku: 'EM-DEV-BRN-03', name: 'Smoky Quartz (DEV)', hex: '#664a2b', material: 'Smoky Quartz', supplierRef: null, diameterMm: 8, active: true },
-
-  // --- grey family ---
-  { sku: 'EM-DEV-GRY-01', name: 'Moonstone (DEV)', hex: '#b9bdc2', material: 'Moonstone', supplierRef: null, diameterMm: 8, active: true },
-  { sku: 'EM-DEV-GRY-02', name: 'Labradorite (DEV)', hex: '#949ca3', material: 'Labradorite', supplierRef: null, diameterMm: 8, active: true },
-  { sku: 'EM-DEV-GRY-03', name: 'Storm Agate (DEV)', hex: '#6f767e', material: 'Agate', supplierRef: null, diameterMm: 8, active: true },
-
-  // --- inactive example: proves the matcher can never select retired stock.
-  //     Deliberately given a colour nothing else has, so tests can target it.
-  { sku: 'EM-DEV-RETIRED-01', name: 'Retired Example (DEV, INACTIVE)', hex: '#ff00ff', material: 'None', supplierRef: null, diameterMm: 8, active: false },
+  {
+    sku: 'B001',
+    name: 'Grey Taupe',
+    family: 'grey-taupe',
+    hex: '#8b8378', // approx: centre between light beige-grey and dark charcoal-grey
+    variation: 'high',
+    appearance: 'Grey / taupe, polished; substantial natural variation — individual beads range from light beige-grey to dark charcoal-grey.',
+    usefulFor: ['grey', 'brown', 'hazel'],
+    supplierRef: null,
+    diameterMm: 6,
+    active: true,
+  },
+  {
+    sku: 'B002',
+    name: 'Light Green',
+    family: 'light-green',
+    hex: '#8aae85', // approx: centre of light-to-medium translucent green
+    variation: 'medium',
+    appearance: 'Light to medium green, somewhat translucent, natural inclusions / variation, polished.',
+    usefulFor: ['green', 'hazel'],
+    supplierRef: null,
+    diameterMm: 6,
+    active: true,
+  },
+  {
+    sku: 'B003',
+    name: 'Blue Grey',
+    family: 'blue-grey',
+    hex: '#8fa9bc', // approx: centre of light-blue → blue-grey range
+    variation: 'medium',
+    appearance: 'Light blue to blue-grey, somewhat translucent, some darker natural inclusions, polished.',
+    usefulFor: ['blue', 'grey'],
+    supplierRef: null,
+    diameterMm: 6,
+    active: true,
+  },
+  {
+    sku: 'B004',
+    name: 'Muted Green',
+    family: 'muted-green',
+    hex: '#6b7d66', // approx: darker grey-green centre
+    variation: 'medium',
+    appearance: 'Darker / muted green with grey-green tones, natural variation, polished.',
+    usefulFor: ['green', 'hazel', 'grey'],
+    supplierRef: null,
+    diameterMm: 6,
+    active: true,
+  },
+  {
+    sku: 'B005',
+    name: 'Champagne',
+    family: 'champagne',
+    hex: '#d5c39c', // approx: cream / champagne / warm pale yellow centre
+    variation: 'medium', // described as low-to-medium; recorded as medium (enum)
+    appearance: 'Cream / champagne / warm pale yellow, translucent to semi-translucent, polished. Variation: low-to-medium.',
+    usefulFor: ['hazel', 'brown'], // + amber/golden iris highlights
+    supplierRef: null,
+    diameterMm: 6,
+    active: true,
+  },
+  {
+    sku: 'B006',
+    name: 'Taupe Brown Veined',
+    family: 'taupe-brown-veined',
+    hex: '#9d8468', // approx: beige/taupe base tone (veining not representable in one hex)
+    variation: 'high',
+    appearance: 'Beige / taupe base with visible brown veining and patterning; substantial natural visual variation, polished.',
+    usefulFor: ['brown', 'hazel', 'grey'],
+    supplierRef: null,
+    diameterMm: 6,
+    active: true,
+  },
 ];
 
 // The only list matching is allowed to see. Returns a fresh array each call so
