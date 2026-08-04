@@ -47,12 +47,21 @@ from an eye-colour category:
 
 ```
 pixels (480² canvas, ephemeral)
-→ iris ring sample (30–40% of frame radius; never silently widened)
-→ deterministic CIE Lab clustering → measuredPalette: 3–5 × {hex, lab, weight, radialZone}
+→ deterministic pupil estimate (darkest compact disc; plausibility-gated)
+→ iris annulus RELATIVE to the pupil (inner 1.15×pupilR; outer bounded by a
+  limbus estimate when sclera is visible, else 2.3×pupilR) — never widened
+→ deterministic CIE Lab clustering (merge ΔE 7)
+  → measuredPalette: 3–5 × {hex, lab, weight, radialZone (pupil-relative)}
 → CIEDE2000 match per colour → physical SKUs with honest ΔE + weight
 → weights → exact bead quantities (largest remainder)
 → Dusk/Cadence/Wild weighted placement → position-by-position SKU sequence
 ```
+
+Pupil-anchored sampling means the same iris measures the same regardless of
+pupil dilation, framing or position (verified: identical palettes across
+pupil-size and offset fixture variants). A failed pupil/limbus estimate, a
+starved annulus, glare or heavy contamination each produce an explicit
+retake — never a guessed palette.
 
 Classification (blue/green/brown/hazel/grey → stone name) is **metadata
 only** — naming, UI copy, iris-shader styling. It can never create or

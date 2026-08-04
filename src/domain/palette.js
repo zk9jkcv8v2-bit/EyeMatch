@@ -16,7 +16,11 @@
 // ---------------------------------------------------------------------------
 const L_BIN = 12.5;          // Lab grid: L* bin height (8 bins over 0..100)
 const AB_BIN = 12;           // Lab grid: a*/b* bin width
-const MERGE_DE = 10;         // clusters closer than this ΔE2000 merge (≈ "clearly related")
+// MERGE_DE 10 → 7 (Sampling V2): the real-image audit proved ΔE≤10 merged
+// pale gold with ochre — perceptually distinct tissue that maps to different
+// physical beads (B005 vs B006). 7 preserves that distinction on the real
+// regression photo while uniform fixtures still collapse to one cluster.
+const MERGE_DE = 7;
 const MAX_COLORS = 5;        // palette ceiling
 const MIN_CLUSTER_WEIGHT = 0.05; // clusters below 5% of accepted pixels are noise
 const MIN_SAMPLES = 500;     // fewer accepted pixels than this → retake, never guess
@@ -36,10 +40,13 @@ function isContaminant([L, a, b]) {
   return false;
 }
 
-// pixels: [{ lab: [L,a,b], radial: 0..1 fraction of frame radius }]
+// pixels: [{ lab: [L,a,b], radial: 0..1 }] where radial is the NORMALIZED
+// iris radius from scan.sampleIrisPixels — 0 at the annulus inner edge
+// (collarette side), 1 at the outer edge (ciliary side). radialZone is
+// descriptive metadata in thirds of that span; it never forces colours.
 // Returns { ok:true, palette, diagnostics } or { ok:false, reason, diagnostics }.
 // `reason` is a machine key — UI copy is the caller's job.
-export function buildMeasuredPalette(pixels, { ringInner = 0.3, ringOuter = 0.4 } = {}) {
+export function buildMeasuredPalette(pixels) {
   const diagnostics = { accepted: pixels.length, clusters: 0, prunedWeight: 0 };
 
   if (pixels.length < MIN_SAMPLES) {
@@ -100,11 +107,7 @@ export function buildMeasuredPalette(pixels, { ringInner = 0.3, ringOuter = 0.4 
   //    (A genuinely uniform iris yields ONE entry — diversity is never faked.)
   const top = kept.slice(0, MAX_COLORS);
   const keptTotal = top.reduce((a, c) => a + c.n, 0);
-  const span = ringOuter - ringInner;
-  const zone = (r) => {
-    const t = span > 0 ? (r - ringInner) / span : 0.5;
-    return t < 1 / 3 ? 'inner' : t < 2 / 3 ? 'mid' : 'outer';
-  };
+  const zone = (t) => (t < 1 / 3 ? 'inner' : t < 2 / 3 ? 'mid' : 'outer');
   const palette = top.map((cl) => ({
     hex: labToHex(cl.lab),
     lab: cl.lab.map((v) => +v.toFixed(2)),

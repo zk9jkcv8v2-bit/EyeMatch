@@ -35,44 +35,155 @@ function rgbToHsl(r, g, b) {
   return { h: h * 360, s, l };
 }
 
-/* ---------------- iris ring sampling ---------------- */
+/* ---------------- pupil-anchored iris sampling (V2) ---------------- */
+//
+// The real-image audit proved a fixed frame-centred ring fails on dilated /
+// off-centre pupils: it sampled the pupil itself and never reached the outer
+// iris. V2 first estimates the pupil (the darkest compact disc near frame
+// centre — a natural fiducial, no ML), then samples an annulus RELATIVE to
+// the pupil, so the same iris is sampled consistently across dilation,
+// framing and eye position. A bad pupil estimate or a starved annulus is an
+// explicit retake — never a silent fallback to the old geometry.
+// Pixel-level rejection stays minimal (near-black / near-white only);
+// subtler judgement stays at cluster level in domain/palette.js.
 
-// The iris ring: 30–40% of the frame radius when the eye fills the
-// viewfinder. NOTE (Measured Palette V1): the ring is NEVER silently widened
-// — a sparse or contaminated ring becomes an explicit retake result instead
-// of a guessed colour. Pixel-level rejection is minimal by design (only
-// near-black pupil/lash and very bright specular/sclera); everything subtler
-// — including warm golds that a generic "skin filter" would wrongly eat —
-// is judged at cluster level in domain/palette.js.
-export const RING_INNER = 0.3, RING_OUTER = 0.4;
+// Pupil estimation constants (fractions are of the frame half-size):
+const PUPIL_SEARCH = 0.6;       // search disc for dark candidates
+const PUPIL_DARK_L = 10;        // L* below this = pupil-dark candidate
+const PUPIL_MIN_CANDIDATES = 60; // at step-2 sampling (~240 px of pupil)
+const PUPIL_MIN_R = 0.05, PUPIL_MAX_R = 0.42; // plausible pupil radius range
+const PUPIL_MAX_OFFSET = 0.45;  // centroid must be near-ish frame centre
+const PUPIL_MIN_FILL = 0.35;    // candidates must form a compact disc, not scattered lashes
 
-export function sampleIrisPixels(canvas) {
+// Iris annulus geometry:
+//   inner — multiples of PUPIL radius (pupil-margin/shadow exclusion must
+//           scale with dilation)
+//   outer — anchored to the LIMBUS (iris/sclera boundary) when detectable,
+//           so a constricted and a dilated pupil sample comparable iris
+//           tissue (the §invariance requirement); falls back to a pupil
+//           multiple when no sclera is visible (eye fills the whole frame).
+export const ANNULUS_INNER = 1.15;          // × pupil radius
+export const ANNULUS_OUTER_FALLBACK = 2.3;  // × pupil radius, when limbus unknown
+export const LIMBUS_MARGIN = 0.92;          // stay inside the limbal ring
+const SCLERA_L = 78, SCLERA_C = 18;         // sclera signature: bright + near-neutral
+const LIMBUS_RAYS = 32, LIMBUS_MIN_RAYS = 10;
+
+// Deterministic limbus estimate: march rays outward from the pupil centre
+// until a sustained sclera-signature run; median over rays. Returns null when
+// too few rays find sclera (eye fills the frame, heavy occlusion).
+export function estimateLimbus(data, size, pupil) {
+  const found = [];
+  for (let k = 0; k < LIMBUS_RAYS; k++) {
+    const a = (k / LIMBUS_RAYS) * Math.PI * 2;
+    const dx = Math.cos(a), dy = Math.sin(a);
+    let run = 0;
+    for (let d = pupil.radius * 1.3; ; d += 2) {
+      const x = Math.round(pupil.cx + dx * d), y = Math.round(pupil.cy + dy * d);
+      if (x < 0 || y < 0 || x >= size || y >= size) break;
+      const i = (y * size + x) * 4;
+      const lab = rgbToLab(data[i], data[i + 1], data[i + 2]);
+      if (lab[0] > SCLERA_L && Math.hypot(lab[1], lab[2]) < SCLERA_C) {
+        if (++run >= 3) { found.push(d - 4); break; }
+      } else run = 0;
+    }
+  }
+  if (found.length < LIMBUS_MIN_RAYS) return null;
+  found.sort((a, b) => a - b);
+  return found[Math.floor(found.length / 2)];
+}
+
+// Deterministic pupil estimate: centroid + p95-radius of very-dark pixels
+// near frame centre, with plausibility gates. Returns {ok:false, reason}
+// when no believable pupil exists (blank frames, lash scatter, all-dark).
+export function estimatePupil(canvas) {
   const ctx = canvas.getContext('2d');
   const size = canvas.width;
   const data = ctx.getImageData(0, 0, size, size).data;
   const R = size / 2;
-  const pixels = [];
-  let scanned = 0;
+
+  let sx = 0, sy = 0, n = 0;
+  const xs = [], ys = [];
   for (let y = 0; y < size; y += 2) {
     for (let x = 0; x < size; x += 2) {
       const dx = x - R, dy = y - R;
-      const dist = Math.sqrt(dx * dx + dy * dy) / R;
-      if (dist < RING_INNER || dist > RING_OUTER) continue;
+      if (Math.sqrt(dx * dx + dy * dy) / R > PUPIL_SEARCH) continue;
+      const i = (y * size + x) * 4;
+      const [L] = rgbToLab(data[i], data[i + 1], data[i + 2]);
+      if (L >= PUPIL_DARK_L) continue;
+      sx += x; sy += y; n++; xs.push(x); ys.push(y);
+    }
+  }
+  if (n < PUPIL_MIN_CANDIDATES) return { ok: false, reason: 'no-pupil' };
+
+  const cx = sx / n, cy = sy / n;
+  if (Math.hypot(cx - R, cy - R) / R > PUPIL_MAX_OFFSET) return { ok: false, reason: 'no-pupil' };
+
+  const dists = xs.map((x, i) => Math.hypot(x - cx, ys[i] - cy)).sort((a, b) => a - b);
+  const radius = dists[Math.floor(dists.length * 0.95)];
+  if (radius / R < PUPIL_MIN_R || radius / R > PUPIL_MAX_R) return { ok: false, reason: 'no-pupil' };
+
+  // Compactness: a real pupil fills its disc; scattered lash/shadow darkness
+  // doesn't. Step-2 grid ⇒ expected density is area/4.
+  const fill = n / (Math.PI * radius * radius / 4);
+  if (fill < PUPIL_MIN_FILL) return { ok: false, reason: 'no-pupil' };
+
+  return { ok: true, cx, cy, radius, fill: +fill.toFixed(2), candidates: n };
+}
+
+export function sampleIrisPixels(canvas) {
+  const pupil = estimatePupil(canvas);
+  if (!pupil.ok) return { pixels: [], scanned: 0, pupil };
+
+  const ctx = canvas.getContext('2d');
+  const size = canvas.width;
+  const data = ctx.getImageData(0, 0, size, size).data;
+
+  const inner = pupil.radius * ANNULUS_INNER;
+  const limbus = estimateLimbus(data, size, pupil);
+  const outer = limbus !== null
+    ? limbus * LIMBUS_MARGIN
+    : pupil.radius * ANNULUS_OUTER_FALLBACK;
+  // A believable iris band must remain; a pupil filling the visible iris
+  // (or a false pupil) is a retake, never a guess.
+  if (outer < inner + pupil.radius * 0.35) {
+    return { pixels: [], scanned: 0, pupil: { ok: false, reason: 'no-iris' } };
+  }
+  const pixels = [];
+  let scanned = 0;
+  const x0 = Math.max(0, Math.floor(pupil.cx - outer)), x1 = Math.min(size - 1, Math.ceil(pupil.cx + outer));
+  const y0 = Math.max(0, Math.floor(pupil.cy - outer)), y1 = Math.min(size - 1, Math.ceil(pupil.cy + outer));
+  for (let y = y0 + (y0 % 2); y <= y1; y += 2) {
+    for (let x = x0 + (x0 % 2); x <= x1; x += 2) {
+      const d = Math.hypot(x - pupil.cx, y - pupil.cy);
+      if (d < inner || d > outer) continue;
       scanned++;
       const i = (y * size + x) * 4;
       const lab = rgbToLab(data[i], data[i + 1], data[i + 2]);
-      if (lab[0] < 12 || lab[0] > 88) continue; // pupil/lash dark · specular/sclera bright
-      pixels.push({ lab, radial: dist });
+      if (lab[0] < 12 || lab[0] > 88) continue; // pupil-margin dark · specular/sclera bright
+      // Normalized iris radius: 0 at the annulus inner edge (collarette side),
+      // 1 at the outer edge (ciliary side). Meaningful anatomy, not frame math.
+      pixels.push({ lab, radial: Math.min(1, Math.max(0, (d - inner) / (outer - inner))) });
     }
   }
-  return { pixels, scanned };
+  return {
+    pixels, scanned, pupil,
+    annulus: { inner: +inner.toFixed(1), outer: +outer.toFixed(1), limbus: limbus === null ? null : +limbus.toFixed(1) },
+  };
 }
 
 // The one entry point the flow uses: canvas → measured palette (or retake).
 export function extractMeasuredPalette(canvas) {
-  const { pixels, scanned } = sampleIrisPixels(canvas);
-  const result = buildMeasuredPalette(pixels, { ringInner: RING_INNER, ringOuter: RING_OUTER });
-  result.diagnostics.scanned = scanned;
+  const s = sampleIrisPixels(canvas);
+  if (!s.pupil.ok) {
+    return { ok: false, reason: s.pupil.reason, diagnostics: { pupil: s.pupil } };
+  }
+  const result = buildMeasuredPalette(s.pixels);
+  result.diagnostics.scanned = s.scanned;
+  result.diagnostics.pupil = {
+    cx: +s.pupil.cx.toFixed(1), cy: +s.pupil.cy.toFixed(1),
+    radius: +s.pupil.radius.toFixed(1), fill: s.pupil.fill,
+  };
+  result.diagnostics.annulus = s.annulus;
   return result;
 }
 
