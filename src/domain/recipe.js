@@ -1,26 +1,28 @@
-// BraceletDesign — the serializable recipe for one personalized bracelet.
+// BraceletDesign v2 — the serializable recipe for one personalized bracelet.
 //
-// This object is the bridge between what the customer sees on screen and what
-// a fulfillment person will eventually build. It contains ONLY derived,
-// non-image data:
+// MEASURED-COLOR-FIRST (schemaVersion 2): the physical palette is derived
+// from the customer's measured iris palette, matched per-colour to the
+// physical inventory, with measured WEIGHTS driving bead quantities.
+// Eye-colour classification is metadata only (stone naming, UI copy) and
+// can never create or overwrite the physical palette.
 //
 //   PRIVACY BOUNDARY
 //   ----------------
 //   The raw eye image NEVER enters a design. It lives on a local <canvas>,
 //   is read once for colour, and is never persisted or transmitted. A recipe
-//   holds nothing that could reconstruct the photo — only the classified eye
-//   colour, generated palette, matched bead SKUs and layout.
+//   holds nothing that could reconstruct the photo — only derived colours,
+//   matched bead SKUs and layout.
 //
 // A design is plain JSON-safe data (no class instances, no functions) so it
-// can later be attached to an order, logged, or re-rendered as-is. The recipe
-// is the source of truth; the design ID is just a handle for humans.
+// can later be attached to an order, logged, or re-rendered as-is. The
+// recipe is the source of truth; the design ID is just a handle for humans.
 
 import { activeBeads } from './inventory.js';
-import { matchPaletteToBeads } from './match.js';
-import { colorIndexFor } from './patterns.js';
+import { matchColorToBead, hexToLab } from './match.js';
+import { buildWeightedSequence } from './patterns.js';
 import { physicalBeadCount } from './sizes.js';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 // Human-readable design ID, e.g. "EM-AQU-7K3M9Q".
 //   - "EM" brand prefix, three letters of the matched stone (support staff can
@@ -39,73 +41,102 @@ export function newDesignId(stoneName = '') {
   return `EM-${prefix}-${rand}`;
 }
 
-// Build the full bead sequence for an arrangement: position p (0-based, going
-// around the wrist) → bead SKU. Uses the exact same colorIndexFor math as the
-// 3-D visualization, so screen and recipe always agree.
-export function buildSequence(beadMatches, arrangement, beadCount) {
-  const n = beadMatches.length;
-  return Array.from({ length: beadCount }, (_, i) =>
-    beadMatches[colorIndexFor(arrangement, i, beadCount, n)].sku);
-}
-
-export function countQuantities(sequence) {
+// Turn merged SKU weights into exact integer bead quantities via the largest
+// remainder method: floors first, then the leftover beads go to the largest
+// fractional parts (ties: heavier weight, then SKU order). Always sums to
+// `total`; small clusters may legitimately round to zero beads.
+export function allocateQuantities(weightsBySku, total) {
+  const entries = Object.entries(weightsBySku);
+  const wSum = entries.reduce((a, [, w]) => a + w, 0);
+  const exact = entries.map(([sku, w]) => {
+    const share = (w / wSum) * total;
+    return { sku, w, floor: Math.floor(share), frac: share - Math.floor(share) };
+  });
+  let left = total - exact.reduce((a, e) => a + e.floor, 0);
+  exact.sort((x, y) => y.frac - x.frac || y.w - x.w || x.sku.localeCompare(y.sku));
+  for (let i = 0; left > 0; i = (i + 1) % exact.length, left--) exact[i].floor++;
   const q = {};
-  for (const sku of sequence) q[sku] = (q[sku] ?? 0) + 1;
+  for (const e of exact.sort((x, y) => x.sku.localeCompare(y.sku))) {
+    if (e.floor > 0) q[e.sku] = e.floor;
+  }
   return q;
 }
 
-// Assemble a complete BraceletDesign from a scan result + customer choices.
+// Map a design's sequence to renderable physical bead hexes.
+export function sequenceHexes(design, inventory = activeBeads()) {
+  const hexBySku = Object.fromEntries(inventory.map((b) => [b.sku, b.hex]));
+  return design.physical.sequence.map((sku) => hexBySku[sku]);
+}
+
+// Assemble a complete BraceletDesign from a measured palette + choices.
 //
-//   match       — the object produced by scan.buildMatch (category, variant,
-//                 stone, gems[5], iris{core,mid,edge})
-//   arrangement — 'dusk' | 'cadence' | 'wild'
-//   size        — 'S' | 'M' | 'L'
-//   designId    — pass an existing ID to keep it stable across pattern/size
-//                 edits of the same bracelet; omitted → a new one is minted
-//   inventory   — injectable for tests; defaults to the active catalog
-//   now         — injectable clock for tests; defaults to real time
+//   measuredPalette — [{ hex, lab, weight, radialZone }] from domain/palette.js
+//                     (weights normalized to 1)
+//   classification  — { category, variant, stone } metadata from scan.classifyPalette
+//   arrangement     — 'dusk' | 'cadence' | 'wild'
+//   size            — 'S' | 'M' | 'L'
+//   designId        — pass an existing ID to keep it stable across pattern/size
+//                     edits of the same bracelet; omitted → a new one is minted
+//   inventory/now   — injectable for tests
 //
-// Deterministic given (match, arrangement, size, inventory): everything except
-// designId/createdAt is a pure function of the inputs.
+// Deterministic given (measuredPalette, classification, arrangement, size,
+// inventory, designId): everything except a freshly-minted id/createdAt is a
+// pure function of the inputs (wild's ordering is seeded by the design id).
 export function buildDesign({
-  match,
+  measuredPalette,
+  classification,
   arrangement,
   size,
   designId,
   inventory = activeBeads(),
   now = () => new Date().toISOString(),
 }) {
-  const beadMatches = matchPaletteToBeads(match.gems, inventory);
-  const beadCount = physicalBeadCount(size);
-  const sequence = buildSequence(beadMatches, arrangement, beadCount);
+  const id = designId ?? newDesignId(classification.stone);
 
-  // Distinct diameters across the selected beads (DEV inventory: always [8]).
-  const diameters = [...new Set(
-    beadMatches.map((m) => inventory.find((b) => b.sku === m.sku)?.diameterMm),
-  )].filter((d) => d != null);
-
-  return {
-    schemaVersion: SCHEMA_VERSION,
-    designId: designId ?? newDesignId(match.stone),
-    createdAt: now(),
-
-    // classification (derived — never the image itself)
-    eye: { category: match.category, variant: match.variant },
-    stone: match.stone,
-
-    // what the generator asked for…
-    generatedPalette: [...match.gems],
-    irisColors: { ...match.iris },
-
-    // …and what the physical catalog can actually supply, with match quality
-    // (CIEDE2000) exposed so bad matches are visible, never hidden.
-    beadMatches: beadMatches.map((m, i) => ({
-      paletteIndex: i,
-      desiredHex: m.desiredHex,
+  // Per-measured-colour physical match, with weight and honest ΔE.
+  const beadMatches = measuredPalette.map((p) => {
+    const m = matchColorToBead(p.hex, inventory);
+    return {
+      measuredHex: p.hex,
       sku: m.sku,
       beadHex: m.beadHex,
       deltaE: Math.round(m.deltaE * 100) / 100,
-    })),
+      weight: p.weight,
+    };
+  });
+
+  // Merge weights of measured colours that landed on the same SKU — the
+  // physical bracelet reflects total per-family proportions.
+  const weightsBySku = {};
+  for (const m of beadMatches) weightsBySku[m.sku] = (weightsBySku[m.sku] ?? 0) + m.weight;
+
+  const beadCount = physicalBeadCount(size);
+  const quantities = allocateQuantities(weightsBySku, beadCount);
+
+  const bead = (sku) => inventory.find((b) => b.sku === sku);
+  const entries = Object.entries(quantities).map(([sku, count]) => ({
+    sku, count, l: hexToLab(bead(sku).hex)[0],
+  }));
+  const sequence = buildWeightedSequence(entries, arrangement, beadCount, id);
+
+  const diameters = [...new Set(Object.keys(quantities).map((sku) => bead(sku)?.diameterMm))]
+    .filter((d) => d != null);
+
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    designId: id,
+    createdAt: now(),
+
+    // classification is METADATA (naming/copy) — it never chose the beads
+    eye: { category: classification.category, variant: classification.variant },
+    stone: classification.stone,
+
+    // what we measured from THIS iris (derived colours only — never pixels)…
+    measuredPalette: measuredPalette.map((p) => ({ ...p })),
+
+    // …and how each measured colour maps to the physical catalog, with match
+    // quality (CIEDE2000) exposed so bad matches are visible, never hidden.
+    beadMatches,
 
     // customer choices
     arrangement,
@@ -114,9 +145,9 @@ export function buildDesign({
     // the buildable spec
     physical: {
       beadCount,
-      beadDiametersMm: diameters,      // [8] until real inventory lands
+      beadDiametersMm: diameters,      // [6] for Inventory V1
       sequence,                        // position → SKU, clockwise from top
-      quantities: countQuantities(sequence),
+      quantities,
     },
   };
 }

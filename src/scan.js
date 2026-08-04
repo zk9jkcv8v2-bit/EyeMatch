@@ -1,10 +1,20 @@
-// Camera handling + iris color extraction + gem palette generation.
+// Camera handling + iris sampling + measured-palette extraction.
+//
+// MEASURED-COLOR-FIRST (Measured Palette V1): the physical design is derived
+// from the iris's actual measured colours (domain/palette.js). Eye-colour
+// classification below is METADATA ONLY — stone naming, UI copy, iris-shader
+// styling. It never creates or constrains the physical bead palette.
+// (The old canonical-category-palette path was deleted; the physical catalog
+// itself now guarantees the bracelet can't be an impossible colour.)
+
+import { rgbToLab, hexToLab, labToHex } from './domain/match.js';
+import { buildMeasuredPalette } from './domain/palette.js';
 
 export function hexToHsl(hex) {
-  const r = parseInt(hex.slice(1, 3), 16) / 255;
-  const g = parseInt(hex.slice(3, 5), 16) / 255;
-  const b = parseInt(hex.slice(5, 7), 16) / 255;
-  return rgbToHsl(r * 255, g * 255, b * 255);
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return rgbToHsl(r, g, b);
 }
 
 function rgbToHsl(r, g, b) {
@@ -25,106 +35,55 @@ function rgbToHsl(r, g, b) {
   return { h: h * 360, s, l };
 }
 
-export function hslToHex(h, s, l) {
-  h = ((h % 360) + 360) % 360;
-  s = Math.min(1, Math.max(0, s));
-  l = Math.min(1, Math.max(0, l));
-  const a = s * Math.min(l, 1 - l);
-  const f = (n) => {
-    const k = (n + h / 30) % 12;
-    const c = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
-    return Math.round(255 * c).toString(16).padStart(2, '0');
-  };
-  return `#${f(0)}${f(8)}${f(4)}`;
-}
+/* ---------------- iris ring sampling ---------------- */
 
-// Sample a ring where the iris sits when the eye fills the viewfinder —
-// 30–40% of the frame radius. Skipping the centre entirely keeps the black
-// pupil from dragging the read dark; rejecting extremes drops lashes,
-// specular highlights and sclera. If the ring is too sparse (eye framed
-// loosely), widen once as a fallback.
-export function extractIrisColor(canvas) {
+// The iris ring: 30–40% of the frame radius when the eye fills the
+// viewfinder. NOTE (Measured Palette V1): the ring is NEVER silently widened
+// — a sparse or contaminated ring becomes an explicit retake result instead
+// of a guessed colour. Pixel-level rejection is minimal by design (only
+// near-black pupil/lash and very bright specular/sclera); everything subtler
+// — including warm golds that a generic "skin filter" would wrongly eat —
+// is judged at cluster level in domain/palette.js.
+export const RING_INNER = 0.3, RING_OUTER = 0.4;
+
+export function sampleIrisPixels(canvas) {
   const ctx = canvas.getContext('2d');
   const size = canvas.width;
   const data = ctx.getImageData(0, 0, size, size).data;
   const R = size / 2;
-
-  const sample = (rInner, rOuter) => {
-    const acc = { w: 0, r: 0, g: 0, b: 0, n: 0 };
-    const grey = { w: 0, r: 0, g: 0, b: 0, n: 0 };
-    for (let y = 0; y < size; y += 2) {
-      for (let x = 0; x < size; x += 2) {
-        const dx = x - R, dy = y - R;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < rInner || dist > rOuter) continue;
-        const i = (y * size + x) * 4;
-        const r = data[i], g = data[i + 1], b = data[i + 2];
-        const { h, s, l } = rgbToHsl(r, g, b);
-        if (l < 0.09 || l > 0.85) continue;           // pupil / specular / sclera
-        if (s > 0.3 && h >= 5 && h <= 32 && l > 0.45) continue; // skin tones
-        if (s < 0.1) {
-          grey.w += 1; grey.r += r; grey.g += g; grey.b += b; grey.n++;
-          continue;
-        }
-        const weight = s * (1 - Math.abs(l - 0.42)); // favor saturated mid-tones
-        acc.w += weight;
-        acc.r += r * weight; acc.g += g * weight; acc.b += b * weight;
-        acc.n++;
-      }
+  const pixels = [];
+  let scanned = 0;
+  for (let y = 0; y < size; y += 2) {
+    for (let x = 0; x < size; x += 2) {
+      const dx = x - R, dy = y - R;
+      const dist = Math.sqrt(dx * dx + dy * dy) / R;
+      if (dist < RING_INNER || dist > RING_OUTER) continue;
+      scanned++;
+      const i = (y * size + x) * 4;
+      const lab = rgbToLab(data[i], data[i + 1], data[i + 2]);
+      if (lab[0] < 12 || lab[0] > 88) continue; // pupil/lash dark · specular/sclera bright
+      pixels.push({ lab, radial: dist });
     }
-    return { acc, grey };
-  };
-
-  // Primary ring: 30–40% of the viewfinder radius.
-  let { acc, grey } = sample(R * 0.3, R * 0.4);
-  if (acc.n + grey.n < 120) ({ acc, grey } = sample(R * 0.18, R * 0.55));
-
-  const best = grey.n > acc.n * 2.5 && grey.n > 150 ? grey : (acc.n ? acc : grey);
-  if (!best.n) return null;
-
-  const r = Math.round(best.r / best.w), g = Math.round(best.g / best.w), b = Math.round(best.b / best.w);
-  return { ...rgbToHsl(r, g, b) };
+  }
+  return { pixels, scanned };
 }
 
-// The only ten eyes we make: five real human eye colors, two variants each.
-// Every scan resolves to one of these anchors — whatever the pixels say, the
-// bracelet can never come out purple, red, or otherwise impossible.
-const EYE_COLORS = {
-  blue: {
-    band: [195, 235],
-    variants: [
-      { stone: 'Aquamarine', h: 204, s: 0.44, l: 0.54 },
-      { stone: 'Sapphire', h: 220, s: 0.5, l: 0.37 },
-    ],
-  },
-  green: {
-    band: [85, 150],
-    variants: [
-      { stone: 'Peridot', h: 92, s: 0.4, l: 0.48 },
-      { stone: 'Emerald', h: 140, s: 0.44, l: 0.34 },
-    ],
-  },
-  brown: {
-    band: [24, 40],
-    variants: [
-      { stone: 'Citrine', h: 36, s: 0.5, l: 0.42 },
-      { stone: 'Smoky Topaz', h: 28, s: 0.4, l: 0.28 },
-    ],
-  },
-  hazel: {
-    band: [38, 56],
-    variants: [
-      { stone: 'Golden Hazel', h: 46, s: 0.46, l: 0.46 },
-      { stone: 'Hazel Mosaic', h: 40, s: 0.42, l: 0.36 },
-    ],
-  },
-  grey: {
-    band: [205, 220],
-    variants: [
-      { stone: 'Moonstone', h: 210, s: 0.09, l: 0.56 },
-      { stone: 'Storm Quartz', h: 214, s: 0.11, l: 0.4 },
-    ],
-  },
+// The one entry point the flow uses: canvas → measured palette (or retake).
+export function extractMeasuredPalette(canvas) {
+  const { pixels, scanned } = sampleIrisPixels(canvas);
+  const result = buildMeasuredPalette(pixels, { ringInner: RING_INNER, ringOuter: RING_OUTER });
+  result.diagnostics.scanned = scanned;
+  return result;
+}
+
+/* ---------------- classification — METADATA ONLY ---------------- */
+
+const STONES = {
+  blue: ['Aquamarine', 'Sapphire'],
+  green: ['Peridot', 'Emerald'],
+  brown: ['Citrine', 'Smoky Topaz'],
+  hazel: ['Golden Hazel', 'Hazel Mosaic'],
+  grey: ['Moonstone', 'Storm Quartz'],
 };
 
 export function classify(hsl) {
@@ -136,42 +95,30 @@ export function classify(hsl) {
   else if (h >= 36 && h < 62 && l > 0.38) category = 'hazel';
   else category = 'brown';                            // reds, magentas, ambers → brown
   const variant = l > 0.42 ? 0 : 1;
-  return { category, variant, stone: EYE_COLORS[category].variants[variant].stone };
+  return { category, variant, stone: STONES[category][variant] };
 }
 
-// Build everything the 3D scene needs from one sampled color. The palette is
-// anchored to the classified eye color; the measurement only nudges hue
-// (clamped inside the category's believable band) and lightness slightly, so
-// each match feels personal while staying biologically real.
-export function buildMatch(hsl) {
-  const { category, variant, stone } = classify(hsl);
-  const anchor = EYE_COLORS[category].variants[variant];
-  const [lo, hi] = EYE_COLORS[category].band;
+// Classify from the measured palette's dominant colour. Used for the stone
+// name, UI copy and iris-shader styling — NOT for bead selection.
+export function classifyPalette(palette) {
+  return classify(hexToHsl(palette[0].hex));
+}
 
-  const h = hsl.h >= lo && hsl.h <= hi
-    ? anchor.h + Math.max(-8, Math.min(8, hsl.h - anchor.h))
-    : anchor.h;
-  const s = category === 'grey'
-    ? anchor.s
-    : Math.max(anchor.s - 0.06, Math.min(anchor.s + 0.08, hsl.s));
-  const l = anchor.l + Math.max(-0.05, Math.min(0.05, hsl.l - 0.45));
-
-  const gems = [
-    hslToHex(h, s, Math.min(0.62, l + 0.14)),
-    hslToHex(h - 6, s * 0.92, l + 0.08),
-    hslToHex(h, s, l),
-    hslToHex(h + 6, s * 1.05, l - 0.1),
-    hslToHex(h + 3, s * 0.85, Math.max(0.16, l - 0.2)),
-  ];
-
-  const iris = {
-    core: hslToHex(38, Math.min(0.5, 0.3 + s * 0.3), 0.38), // amber corona, always warm
-    mid: hslToHex(h, s, l),
-    edge: hslToHex(h - 5, s * 0.9, Math.max(0.12, l - 0.24)),
+// Iris-shader colours derived from the measured palette: warm amber corona
+// (brand constant), dominant measured colour mid, darkened darkest at the
+// edge. Purely visual; deterministic.
+export function irisColorsFor(palette) {
+  const dominant = palette[0];
+  const darkest = palette.reduce((a, p) => (p.lab[0] < a.lab[0] ? p : a), palette[0]);
+  const [L, a, b] = darkest.lab;
+  return {
+    core: '#8a6b38',
+    mid: dominant.hex,
+    edge: labToHex([Math.max(8, L * 0.55), a * 0.9, b * 0.9]),
   };
-
-  return { category, variant, stone, gems, iris, baseHex: hslToHex(h, s, l) };
 }
+
+/* ---------------- camera / capture (unchanged) ---------------- */
 
 export class Scanner {
   constructor({ video, placeholder, captureCanvas }) {

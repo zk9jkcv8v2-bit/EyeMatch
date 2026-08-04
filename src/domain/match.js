@@ -11,17 +11,23 @@
 // Rough CIEDE2000 intuition: <1 imperceptible, 1–2 barely perceptible,
 // 2–10 perceptible, >10 clearly a different colour.
 
-/* ---------- sRGB hex → CIE Lab (D65 reference white) ---------- */
+/* ---------- sRGB ↔ CIE Lab (D65 reference white) ---------- */
+// This file is the single home for colour science — sampling, clustering,
+// matching and recipes all import from here rather than re-deriving.
+
+const EPS = 216 / 24389, KAPPA = 24389 / 27;
 
 function srgbToLinear(c) {
   c /= 255;
   return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
 }
+function linearToSrgb(c) {
+  const v = c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+  return Math.round(Math.min(255, Math.max(0, v * 255)));
+}
 
-export function hexToLab(hex) {
-  const r = srgbToLinear(parseInt(hex.slice(1, 3), 16));
-  const g = srgbToLinear(parseInt(hex.slice(3, 5), 16));
-  const b = srgbToLinear(parseInt(hex.slice(5, 7), 16));
+export function rgbToLab(r8, g8, b8) {
+  const r = srgbToLinear(r8), g = srgbToLinear(g8), b = srgbToLinear(b8);
 
   // linear sRGB → XYZ (D65)
   const x = r * 0.4124564 + g * 0.3575761 + b * 0.1804375;
@@ -29,9 +35,32 @@ export function hexToLab(hex) {
   const z = r * 0.0193339 + g * 0.1191920 + b * 0.9503041;
 
   // XYZ → Lab
-  const f = (t) => (t > 216 / 24389 ? Math.cbrt(t) : ((24389 / 27) * t + 16) / 116);
+  const f = (t) => (t > EPS ? Math.cbrt(t) : (KAPPA * t + 16) / 116);
   const fx = f(x / 0.95047), fy = f(y / 1.0), fz = f(z / 1.08883);
   return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+}
+
+export function hexToLab(hex) {
+  return rgbToLab(
+    parseInt(hex.slice(1, 3), 16),
+    parseInt(hex.slice(3, 5), 16),
+    parseInt(hex.slice(5, 7), 16),
+  );
+}
+
+// Lab → sRGB hex (inverse of the above; out-of-gamut channels clamp).
+export function labToHex([L, a, b]) {
+  const fy = (L + 16) / 116, fx = fy + a / 500, fz = fy - b / 200;
+  const xr = fx ** 3 > EPS ? fx ** 3 : (116 * fx - 16) / KAPPA;
+  const yr = L > KAPPA * EPS ? fy ** 3 : L / KAPPA;
+  const zr = fz ** 3 > EPS ? fz ** 3 : (116 * fz - 16) / KAPPA;
+  const x = xr * 0.95047, y = yr, z = zr * 1.08883;
+
+  const rl = x * 3.2404542 + y * -1.5371385 + z * -0.4985314;
+  const gl = x * -0.9692660 + y * 1.8760108 + z * 0.0415560;
+  const bl = x * 0.0556434 + y * -0.2040259 + z * 1.0572252;
+  const to2 = (v) => linearToSrgb(v).toString(16).padStart(2, '0');
+  return `#${to2(rl)}${to2(gl)}${to2(bl)}`;
 }
 
 /* ---------- CIEDE2000 colour difference ---------- */

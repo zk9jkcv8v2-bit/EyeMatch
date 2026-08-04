@@ -40,17 +40,34 @@ npm run build # → dist/ (deploy anywhere static)
 | `scripts/verify-domain.mjs` | No-framework verification of matching/recipes (`node scripts/verify-domain.mjs`) |
 | `public/brand/` | Official logo/icon SVGs (copied from `../Branding Elements/LOGO/`) |
 
-## Domain model: from scan to buildable bracelet
+## Domain model: measured-color-first (Measured Palette V1)
 
-Each scanned bracelet gets a **`BraceletDesign`** (see `src/domain/recipe.js`):
-a JSON-serializable recipe holding the eye classification, the generated
-palette, the matched **physical bead SKUs** (with CIEDE2000 distance scores so
-match quality is never hidden), the arrangement, size, and the full
-position-by-position bead sequence + quantities. The design ID
-(`EM-AQU-7K3M9Q` style, crypto-random, no personal data) is the handle a
-future order/fulfillment process will reference; the recipe itself is the
-source of truth. Inspect live designs in the console via
-`__flow.designs()`.
+The physical bracelet is derived from the customer's **particular iris**, not
+from an eye-colour category:
+
+```
+pixels (480² canvas, ephemeral)
+→ iris ring sample (30–40% of frame radius; never silently widened)
+→ deterministic CIE Lab clustering → measuredPalette: 3–5 × {hex, lab, weight, radialZone}
+→ CIEDE2000 match per colour → physical SKUs with honest ΔE + weight
+→ weights → exact bead quantities (largest remainder)
+→ Dusk/Cadence/Wild weighted placement → position-by-position SKU sequence
+```
+
+Classification (blue/green/brown/hazel/grey → stone name) is **metadata
+only** — naming, UI copy, iris-shader styling. It can never create or
+overwrite the physical palette. An unclear capture (too few iris pixels, or
+too much glare/contamination) becomes an explicit **retake** — never a
+guessed canonical palette. **Preview policy:** the 3-D bracelet renders the
+matched physical bead colours — what EyeMatch will actually build — not an
+idealised version of the iris.
+
+Each scanned bracelet gets a **`BraceletDesign`** (`src/domain/recipe.js`,
+schemaVersion 2): measured palette, per-colour bead matches (ΔE never
+hidden), arrangement, size, and the exact SKU sequence + quantities a
+fulfillment worker needs. The design ID (`EM-GOL-7K3M9Q` style,
+crypto-random, no personal data) is the future order handle; the recipe is
+the source of truth. Inspect live designs via `__flow.designs()`.
 
 ### Physical Inventory V1
 

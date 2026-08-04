@@ -9,9 +9,10 @@
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { config, petalEdge } from './config.js';
-import { Scanner, extractIrisColor, buildMatch, hexToHsl } from './scan.js';
+import { Scanner, extractMeasuredPalette, classifyPalette, irisColorsFor } from './scan.js';
 import { ARRANGEMENTS } from './domain/patterns.js';
-import { buildDesign, newDesignId } from './domain/recipe.js';
+import { buildDesign, newDesignId, sequenceHexes } from './domain/recipe.js';
+import { hexToLab } from './domain/match.js';
 
 const $ = (id) => document.getElementById(id);
 const show = (el) => { el.hidden = false; };
@@ -40,13 +41,15 @@ export function createFlow(ctx) {
   const BUNDLE_DISCOUNT = 0.10; // a quiet 10% off for sets of two or more
 
   // Every bracelet in the set carries a complete, serializable BraceletDesign
-  // (domain/recipe.js): matched physical bead SKUs, sequence, quantities. The
-  // designId is minted once per scan and stays stable while the customer edits
-  // pattern/size; the recipe re-derives around it. Client-side only for now —
-  // nothing is persisted or transmitted.
+  // (domain/recipe.js, schemaVersion 2): the MEASURED iris palette, per-colour
+  // physical bead matches with weights, and the exact weighted SKU sequence.
+  // Classification is metadata (stone name, iris styling) — it never chooses
+  // beads. The designId is minted once per scan and stays stable while the
+  // customer edits pattern/size. Client-side only — nothing persisted or sent.
   function refreshDesign(member) {
     member.design = buildDesign({
-      match: member.match,
+      measuredPalette: member.palette,
+      classification: member.classification,
       arrangement: member.pattern,
       size: member.size,
       designId: member.design?.designId,
@@ -55,16 +58,25 @@ export function createFlow(ctx) {
       console.info(`[EyeMatch] design ${member.design.designId}`, member.design);
     }
   }
-  function makeMember(match) {
-    const member = { match, pattern: 'dusk', size: 'M', design: null };
+  function makeMember(palette) {
+    const classification = classifyPalette(palette);
+    const member = { palette, classification, pattern: 'dusk', size: 'M', design: null };
     member.design = buildDesign({
-      match, arrangement: member.pattern, size: member.size,
-      designId: newDesignId(match.stone),
+      measuredPalette: palette, classification,
+      arrangement: member.pattern, size: member.size,
+      designId: newDesignId(classification.stone),
     });
     if (import.meta.env.DEV) {
       console.info(`[EyeMatch] design ${member.design.designId}`, member.design);
     }
     return member;
+  }
+
+  // PREVIEW POLICY: the 3-D bracelet always shows the PHYSICAL bead colours
+  // from the recipe sequence — what we can actually build, not an idealised
+  // version of the iris.
+  function showDesignOnBracelet(member, fade = false) {
+    bracelet.setSequence(sequenceHexes(member.design), fade);
   }
 
   // Exclusive backdrop modes (capturing | purchasing); live/reading are
@@ -262,6 +274,7 @@ export function createFlow(ctx) {
 
   $('uploadInput').addEventListener('change', (e) => {
     const file = e.target.files[0];
+    e.target.value = ''; // allow re-selecting the same file after a retake
     if (!file || state.captured) return;
     const img = new Image();
     img.onload = () => {
@@ -277,29 +290,46 @@ export function createFlow(ctx) {
     img.src = URL.createObjectURL(file);
   });
 
+  // An unclear capture never becomes a guessed bracelet: return to the front
+  // door with calm retry copy (no technical jargon).
+  function retakeCapture() {
+    flow.classList.remove('reading');
+    scanner.stop();
+    state.captured = false;
+    enterCapture();
+    $('captureEyebrow').textContent = 'ONE MORE TIME';
+    $('captureTitle').innerHTML = "Let's try that <em>again</em>.";
+    $('captureSub').textContent =
+      "We couldn't get a clear read of your eye. Fill the guide with your iris, in soft even light, and try once more.";
+  }
+
   // The light-sweep that lifts your color out, then carries into the reveal.
   function doReading() {
     flow.classList.add('reading');
     if (!stages.captureLive.hidden) scramble($('captureStatus'), 'Reading your color…', 700);
 
+    let ok = false;
     gsap.timeline()
       .set(flash, { opacity: 0, scale: 0.25, transformOrigin: '50% 50%' })
       .to(flash, { opacity: 1, scale: 1.15, duration: 0.5, ease: 'power2.in' })
       .add(() => {
-        const hsl = extractIrisColor($('captureCanvas'));
-        const match = buildMatch(hsl ?? { h: 210, s: 0.28, l: 0.45 });
-        // A new bracelet joins the set; it becomes the one we reveal & configure.
-        // makeMember also builds its physical BraceletDesign (bead SKUs, sequence).
-        state.current = makeMember(match);
-        state.set.push(state.current);
+        // Measure THIS iris. If the ring can't be trusted, we ask again —
+        // never a fabricated canonical palette.
+        const res = extractMeasuredPalette($('captureCanvas'));
+        if (import.meta.env.DEV) console.info('[EyeMatch] palette', res);
+        ok = res.ok;
+        if (res.ok) {
+          state.current = makeMember(res.palette);
+          state.set.push(state.current);
+        }
       })
       .to(flash, { opacity: 0, duration: 0.55, ease: 'power2.out' }, '+=0.05')
-      .add(() => { flow.classList.remove('reading'); reveal(); });
+      .add(() => { ok ? (flow.classList.remove('reading'), reveal()) : retakeCapture(); });
   }
 
   /* ============ STEP 2 — the reveal: iris reborn → their bracelet ============ */
   async function reveal() {
-    const match = state.current.match;
+    const { palette, classification } = state.current;
     await coverWipe();
 
     setMode(null);
@@ -324,14 +354,14 @@ export function createFlow(ctx) {
 
     gsap.killTweensOf([iris.uniforms.uAlpha, iris.uniforms.uDissolve, iris, ...bracelet.gems.map((g) => g.scale)]);
 
-    // Stage the world: their iris colors, their stones, all hidden to start.
-    iris.setColors(match.iris);
+    // Stage the world: the iris shows the MEASURED colours of this eye; the
+    // bracelet shows the PHYSICAL beads the recipe will actually build.
+    iris.setColors(irisColorsFor(palette));
     iris.uniforms.uAlpha.value = 0;
     iris.uniforms.uDissolve.value = 0;
     iris.basePupil = 0.3;
     iris.mesh.scale.set(1, 1, 1);
-    bracelet.pattern = state.current.pattern;
-    bracelet.setColors(match.gems);
+    showDesignOnBracelet(state.current);
     bracelet.gems.forEach((g) => g.scale.setScalar(0.0001));
     bracelet.group.rotation.set(0, 0, 0);
     bracelet.group.position.set(0, 0, 0);
@@ -368,7 +398,7 @@ export function createFlow(ctx) {
       // 4 — name their stone
       .to('#revealEyebrow', { opacity: 0.45, duration: 0.8 }, '<')
       .add(() => {
-        $('stoneName').innerHTML = `<em>${match.stone}</em>`;
+        $('stoneName').innerHTML = `<em>${classification.stone}</em>`;
         gsap.fromTo('#stoneName', { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 1, ease: 'power3.out' });
       }, '<+=0.2')
       .to('#revealSub', { opacity: 0.6, duration: 0.9 }, '<+=0.5')
@@ -389,9 +419,9 @@ export function createFlow(ctx) {
   function syncPattern(id) {
     if (state.current) {
       state.current.pattern = id;
-      refreshDesign(state.current); // keep the recipe in step with the render
+      refreshDesign(state.current);              // recipe stays the source of truth
+      showDesignOnBracelet(state.current, true); // render follows the recipe
     }
-    bracelet.setArrangement(id);
     document.querySelectorAll('#revealPattern .pattern')
       .forEach((b) => b.classList.toggle('active', b.dataset.pattern === id));
   }
@@ -444,19 +474,25 @@ export function createFlow(ctx) {
       const row = document.createElement('div');
       row.className = 'set-member';
 
+      // Strand swatches show the PHYSICAL bead colours of this member's
+      // recipe, heaviest family first — screen == what we build.
       const strand = document.createElement('div');
       strand.className = 'set-strand';
-      member.match.gems.forEach((c) => {
-        const s = document.createElement('span');
-        s.style.background = swatchGradient(c);
-        strand.appendChild(s);
-      });
+      const hexBySku = {};
+      member.design.beadMatches.forEach((m) => { hexBySku[m.sku] = m.beadHex; });
+      Object.entries(member.design.physical.quantities)
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .forEach(([sku]) => {
+          const s = document.createElement('span');
+          s.style.background = swatchGradient(hexBySku[sku]);
+          strand.appendChild(s);
+        });
 
       const meta = document.createElement('div');
       meta.className = 'set-meta';
       const name = document.createElement('p');
       name.className = 'set-stone';
-      name.innerHTML = `<em>${member.match.stone}</em><span class="set-pattern">Nº ${idx + 1}</span>`;
+      name.innerHTML = `<em>${member.classification.stone}</em><span class="set-pattern">Nº ${idx + 1}</span>`;
 
       const sizes = document.createElement('div');
       sizes.className = 'opt-row mini';
@@ -491,9 +527,8 @@ export function createFlow(ctx) {
     show(stages.configure);
     poseConfigure();
 
-    // Carry the chosen arrangement through so the matched bracelet renders right.
-    bracelet.pattern = cur.pattern;
-    bracelet.setArrangement(cur.pattern);
+    // The purchase hero shows the physical beads of the current recipe.
+    showDesignOnBracelet(cur);
 
     if (n > 1) {
       $('reserveEyebrow').textContent = 'YOUR EYEMATCH SET';
@@ -503,7 +538,7 @@ export function createFlow(ctx) {
       renderOrder();
     } else {
       $('reserveEyebrow').textContent = 'YOUR EYEMATCH BRACELET';
-      $('reserveStoneName').textContent = cur.match.stone;
+      $('reserveStoneName').textContent = cur.classification.stone;
       show($('sizeZone'));
       hide($('orderZone'));
       document.querySelectorAll('#sizeOptions .opt')
@@ -570,22 +605,38 @@ export function createFlow(ctx) {
     console.warn('[EyeMatch] No Stripe Payment Link configured — set config.checkout.paymentLinks to enable checkout.');
   }
 
-  // Dev hooks: build an order quickly without a camera. Both await the enter
-  // transition so its stage-switch can't land on top of theirs.
+  // Dev hooks: build an order quickly without a camera. Input is a hex, an
+  // array of hexes (equal weights) or [hex, weight] pairs — turned into a
+  // synthetic measured palette. Both await the enter transition so its
+  // stage-switch can't land on top of theirs.
+  function toPalette(input) {
+    const pairs = typeof input === 'string'
+      ? [[input, 1]]
+      : input.map((e) => (Array.isArray(e) ? e : [e, 1]));
+    const total = pairs.reduce((a, [, w]) => a + w, 0);
+    return pairs
+      .map(([hex, w]) => ({
+        hex,
+        lab: hexToLab(hex).map((v) => +v.toFixed(2)),
+        weight: +(w / total).toFixed(4),
+        radialZone: 'mid',
+      }))
+      .sort((x, y) => y.weight - x.weight || (x.hex < y.hex ? -1 : 1));
+  }
   window.__flow = {
-    simulate: async (hex = '#7a5a32') => {
+    simulate: async (input = '#7a5a32') => {
       await enter();
       if (state.set.length >= state.target) { state.target = state.set.length + 1; }
-      state.current = makeMember(buildMatch(hexToHsl(hex)));
+      state.current = makeMember(toPalette(input));
       state.set.push(state.current);
       reveal();
     },
-    simulateSet: async (hexes = ['#5a7fa0', '#6b7f4f']) => {
+    simulateSet: async (inputs = ['#5a7fa0', '#6b7f4f']) => {
       await enter();
-      state.target = hexes.length;
-      state.set = hexes.map((hex) => makeMember(buildMatch(hexToHsl(hex))));
+      state.target = inputs.length;
+      state.set = inputs.map((input) => makeMember(toPalette(input)));
       state.current = state.set[state.set.length - 1];
-      bracelet.setColors(state.current.match.gems);
+      showDesignOnBracelet(state.current);
       bracelet.gems.forEach((g) => g.scale.setScalar(g.userData.baseScale));
       bracelet.group.rotation.set(-1.02, 0, 0);
       sceneState.spin = true;

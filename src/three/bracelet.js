@@ -126,8 +126,9 @@ export class Bracelet {
     this.shiftMode = true;
   }
 
-  // Lock to a fixed set of colours (the reveal, matched to the eye), arranged
-  // by the current pattern. Applied instantly — used as the beads crystallize.
+  // Lock to a fixed set of colours (legacy path: renderer derives the
+  // arrangement itself). The flow now prefers setSequence(), which renders
+  // the EXACT physical bead order from the BraceletDesign recipe.
   setColors(hexColors) {
     this.shiftMode = false;
     this._lastColors = hexColors.slice();
@@ -139,6 +140,29 @@ export class Bracelet {
     if (!this._lastColors) return;
     this.pattern = pattern;
     this._applyArrangement(true);
+  }
+
+  // PREVIEW POLICY (Measured Palette V1): the on-screen bracelet shows the
+  // physical product. `hexes` is the per-position bead colour list derived
+  // from the recipe's SKU sequence (recipe.sequenceHexes) — position i maps
+  // to bead i, so screen order === build order. If the physical bead count
+  // ever differs from the rendered count, positions are index-scaled.
+  setSequence(hexes, fade = false) {
+    this.shiftMode = false;
+    const targets = this.gems.map((_, i) => {
+      const idx = Math.floor((i / this.count) * hexes.length);
+      return new THREE.Color(hexes[Math.min(idx, hexes.length - 1)]);
+    });
+    if (!fade) {
+      this.gems.forEach((bead, i) => bead.material.color.copy(targets[i]));
+      this._fading = false;
+      return;
+    }
+    this._fadeFrom = this.gems.map((bead) => bead.material.color.clone());
+    this._fadeTo = targets;
+    this._fadeT0 = performance.now();
+    this._fadeDur = 650;
+    this._fading = true;
   }
 
   _applyArrangement(fade) {
