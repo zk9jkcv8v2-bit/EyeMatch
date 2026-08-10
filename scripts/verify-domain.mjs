@@ -27,6 +27,7 @@ const hex2rgb = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16)
 function eyeCanvas({
   pupil = { cx: 240, cy: 240, r: 55 }, irisR = 190, zones = [],
   irisHex = null, scleraHex = '#ece7e0', pupilHex = '#0a0908', eyelidY = null, skinHex = '#d8b6a0',
+  reflection = null, lashes = false,
 } = {}) {
   const data = new Uint8ClampedArray(SIZE * SIZE * 4);
   const sclera = hex2rgb(scleraHex), pup = hex2rgb(pupilHex), skin = hex2rgb(skinHex);
@@ -49,12 +50,18 @@ function eyeCanvas({
           px = (zone.cum.find(([, c]) => angFrac <= c + 1e-9) ?? zone.cum[zone.cum.length - 1])[0];
         }
       } else px = sclera;
+      // Specular highlight: a window/sky reflected on the cornea, sitting
+      // INSIDE the iris — the real-world contamination V2.1 must reject.
+      if (reflection && Math.hypot(x - reflection.cx, y - reflection.cy) < reflection.r) px = hex2rgb(reflection.hex);
+      // Eyelash streaks: dark but above the old L*12 floor.
+      if (lashes && y < pupil.cy && ((x * 7 + y * 3) % 29) < 4 && d < irisR) px = [34, 28, 24];
       const i = (y * SIZE + x) * 4;
       data[i] = px[0]; data[i + 1] = px[1]; data[i + 2] = px[2]; data[i + 3] = 255;
     }
   }
   return { width: SIZE, getContext: () => ({ getImageData: () => ({ data }) }) };
 }
+const REFLECTION = { cx: 290, cy: 200, r: 45, hex: '#aad6f1' }; // sky-blue window highlight
 
 const HAZEL_ZONES = [
   { tMax: 0.38, sectors: [['#c9a95c', 0.6], ['#9c6b2e', 0.4]] },                    // collarette: gold + amber
@@ -151,6 +158,56 @@ for (const [k, r] of Object.entries(results)) {
   check(`invariance: ${k} palette ≈ baseline (dist<8)`, pd < 8, pd.toFixed(2));
   check(`invariance: ${k} recipe ≈ baseline (L1<0.4)`, ql < 0.4, ql.toFixed(2));
 }
+
+/* ---- 5b. SPECULAR REFLECTION MUST NEVER BECOME A PHYSICAL BEAD (V2.1) ---- */
+// A window/sky highlight sits inside the iris, so geometry can't exclude it,
+// and an absolute lightness cut would delete light-grey/light-blue irises.
+// The adaptive rule (L* > medianL+22 AND C* < 25) must remove it everywhere
+// while leaving every genuine iris type intact.
+const skusOf = (res) => (res.ok ? [...new Set(res.palette.map((p) => nearest(p.hex)))].sort() : null);
+const reflectionCases = {
+  brown: '#7a5a32', hazelZones: null, blue: '#5a7fa0', lightGrey: '#b9bdc2', lightBlue: '#a6c4d6',
+};
+for (const [label, hex] of Object.entries(reflectionCases)) {
+  if (!hex) continue;
+  const clean = extractMeasuredPalette(eyeCanvas({ irisHex: hex }));
+  const withRefl = extractMeasuredPalette(eyeCanvas({ irisHex: hex, reflection: REFLECTION }));
+  check(`reflection/${label}: still extracts`, withRefl.ok, withRefl.reason);
+  check(`reflection/${label}: highlight adds no new bead family`,
+    withRefl.ok && clean.ok && JSON.stringify(skusOf(withRefl)) === JSON.stringify(skusOf(clean)),
+    `clean=${JSON.stringify(skusOf(clean))} withReflection=${JSON.stringify(skusOf(withRefl))}`);
+}
+// The specific defect that motivated V2.1: a BROWN iris must not acquire the
+// blue-grey bead that the reflection alone would match.
+const brownRefl = extractMeasuredPalette(eyeCanvas({ irisHex: '#7a5a32', reflection: REFLECTION }));
+check('reflection: brown iris never yields B003 (the V2.1 defect)',
+  brownRefl.ok && !skusOf(brownRefl).includes('B003'), JSON.stringify(skusOf(brownRefl)));
+check('reflection: highlight pixels are actually being rejected',
+  brownRefl.ok && brownRefl.diagnostics.specularRejected > 0,
+  `rejected=${brownRefl.ok ? brownRefl.diagnostics.specularRejected : 'n/a'}`);
+// Multicolor iris keeps its real structure when a highlight is present.
+const hazelRefl = extractMeasuredPalette(eyeCanvas({ zones: HAZEL_ZONES, reflection: REFLECTION }));
+const hazelClean = extractMeasuredPalette(eyeCanvas({ zones: HAZEL_ZONES }));
+check('reflection: multicolor hazel keeps its bead families',
+  hazelRefl.ok && JSON.stringify(skusOf(hazelRefl)) === JSON.stringify(skusOf(hazelClean)),
+  `clean=${JSON.stringify(skusOf(hazelClean))} withReflection=${JSON.stringify(skusOf(hazelRefl))}`);
+// Light irises must survive the adaptive rule (an absolute cut would kill them).
+for (const [label, hex] of [['light grey', '#b9bdc2'], ['light blue', '#a6c4d6']]) {
+  const r = extractMeasuredPalette(eyeCanvas({ irisHex: hex }));
+  check(`light iris (${label}) survives specular rejection`, r.ok && r.palette.length === 1,
+    r.ok ? `${r.palette.length} colours` : r.reason);
+}
+// Eyelash streaks (L*≈13, above the old floor) must not create a bead family.
+for (const [label, opts] of [['brown', { irisHex: '#7a5a32' }], ['hazel', { zones: HAZEL_ZONES }]]) {
+  const clean = extractMeasuredPalette(eyeCanvas(opts));
+  const lashy = extractMeasuredPalette(eyeCanvas({ ...opts, lashes: true }));
+  check(`lashes/${label}: no new bead family from eyelash shadow`,
+    lashy.ok && JSON.stringify(skusOf(lashy)) === JSON.stringify(skusOf(clean)),
+    `clean=${JSON.stringify(skusOf(clean))} lashes=${JSON.stringify(skusOf(lashy))}`);
+}
+// Very dark brown must still be measurable with the raised dark floor.
+const veryDark = extractMeasuredPalette(eyeCanvas({ irisHex: '#3a2a1c' }));
+check('very dark brown iris still extracts (dark floor L*15)', veryDark.ok, veryDark.reason);
 
 /* ---- 6. UNIFORM-EYE HONESTY ---- */
 const uniBrown = extractMeasuredPalette(eyeCanvas({ irisHex: '#7a5a32' }));

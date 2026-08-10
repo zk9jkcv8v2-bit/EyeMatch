@@ -50,6 +50,11 @@ pixels (480² canvas, ephemeral)
 → deterministic pupil estimate (darkest compact disc; plausibility-gated)
 → iris annulus RELATIVE to the pupil (inner 1.15×pupilR; outer bounded by a
   limbus estimate when sclera is visible, else 2.3×pupilR) — never widened
+→ adaptive contamination rejection: dark floor L*15 (pupil margin, eyelashes)
+  plus a specular rule measured against THIS iris's own median lightness
+  (reject L* > median+22 with C* < 25), so a window/sky highlight on the
+  cornea can never become a bead colour while light-grey and light-blue
+  irises — just as bright, but not brighter than their own median — survive
 → deterministic CIE Lab clustering (merge ΔE 7)
   → measuredPalette: 3–5 × {hex, lab, weight, radialZone (pupil-relative)}
 → CIEDE2000 match per colour → physical SKUs with honest ΔE + weight

@@ -68,6 +68,22 @@ export const LIMBUS_MARGIN = 0.92;          // stay inside the limbal ring
 const SCLERA_L = 78, SCLERA_C = 18;         // sclera signature: bright + near-neutral
 const LIMBUS_RAYS = 32, LIMBUS_MIN_RAYS = 10;
 
+// Pixel rejection (V2.1). A specular highlight — a window/sky reflected on the
+// cornea — sits INSIDE the iris and inside the annulus, so geometry alone
+// cannot exclude it. It cannot be excluded by an absolute lightness rule
+// either: a light-grey or light-blue iris is just as bright as a highlight
+// (both L*≈76), and an absolute cut deletes those irises entirely.
+// What separates them is brightness RELATIVE to this iris plus chroma —
+// a highlight is much lighter than its own iris and washed out, while real
+// bright iris tissue (gold) carries strong chroma. Hence:
+//   reject if  L* > medianL + SPECULAR_DELTA_L  AND  C* < SPECULAR_MAX_C
+// This is what stops a reflection from becoming a physical bead colour
+// (verified: brown iris + reflection no longer yields a blue-grey B003 bead).
+const DARK_L = 15;              // pupil margin + eyelash (lashes survive L*12)
+const BRIGHT_L = 88;            // absolute blow-out
+const SPECULAR_DELTA_L = 22;    // "much lighter than this iris"
+const SPECULAR_MAX_C = 25;      // real bright iris tissue carries more chroma
+
 // Deterministic limbus estimate: march rays outward from the pupil centre
 // until a sustained sclera-signature run; median over rays. Returns null when
 // too few rays find sclera (eye fills the frame, heavy occlusion).
@@ -148,7 +164,10 @@ export function sampleIrisPixels(canvas) {
   if (outer < inner + pupil.radius * 0.35) {
     return { pixels: [], scanned: 0, pupil: { ok: false, reason: 'no-iris' } };
   }
-  const pixels = [];
+  // Pass 1 — gather the annulus and keep pixels within the absolute limits.
+  // Normalized iris radius: 0 at the annulus inner edge (collarette side),
+  // 1 at the outer edge (ciliary side). Meaningful anatomy, not frame math.
+  const candidates = [];
   let scanned = 0;
   const x0 = Math.max(0, Math.floor(pupil.cx - outer)), x1 = Math.min(size - 1, Math.ceil(pupil.cx + outer));
   const y0 = Math.max(0, Math.floor(pupil.cy - outer)), y1 = Math.min(size - 1, Math.ceil(pupil.cy + outer));
@@ -159,14 +178,23 @@ export function sampleIrisPixels(canvas) {
       scanned++;
       const i = (y * size + x) * 4;
       const lab = rgbToLab(data[i], data[i + 1], data[i + 2]);
-      if (lab[0] < 12 || lab[0] > 88) continue; // pupil-margin dark · specular/sclera bright
-      // Normalized iris radius: 0 at the annulus inner edge (collarette side),
-      // 1 at the outer edge (ciliary side). Meaningful anatomy, not frame math.
-      pixels.push({ lab, radial: Math.min(1, Math.max(0, (d - inner) / (outer - inner))) });
+      if (lab[0] < DARK_L || lab[0] > BRIGHT_L) continue; // pupil margin / lash · blow-out
+      candidates.push({ lab, radial: Math.min(1, Math.max(0, (d - inner) / (outer - inner))) });
     }
   }
+
+  // Pass 2 — adaptive specular rejection, measured against THIS iris's own
+  // median lightness so light irises are never mistaken for highlights.
+  const sortedL = candidates.map((p) => p.lab[0]).sort((a, b) => a - b);
+  const medianL = sortedL.length ? sortedL[sortedL.length >> 1] : 0;
+  const pixels = candidates.filter(
+    (p) => !(p.lab[0] > medianL + SPECULAR_DELTA_L
+      && Math.hypot(p.lab[1], p.lab[2]) < SPECULAR_MAX_C),
+  );
+
   return {
-    pixels, scanned, pupil,
+    pixels, scanned, pupil, medianL: +medianL.toFixed(1),
+    specularRejected: candidates.length - pixels.length,
     annulus: { inner: +inner.toFixed(1), outer: +outer.toFixed(1), limbus: limbus === null ? null : +limbus.toFixed(1) },
   };
 }
@@ -184,6 +212,8 @@ export function extractMeasuredPalette(canvas) {
     radius: +s.pupil.radius.toFixed(1), fill: s.pupil.fill,
   };
   result.diagnostics.annulus = s.annulus;
+  result.diagnostics.medianL = s.medianL;
+  result.diagnostics.specularRejected = s.specularRejected;
   return result;
 }
 
