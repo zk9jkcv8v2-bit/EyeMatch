@@ -5,8 +5,8 @@
 // pushed through the REAL pipeline: pupil estimation → limbus-bounded annulus
 // → Lab clustering → matching → weighted recipe.
 
-import { hexToLab, labToHex, deltaE2000, matchColorToBead } from '../src/domain/match.js';
-import { BEAD_INVENTORY, activeBeads, INVENTORY_STATUS } from '../src/domain/inventory.js';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { hexToLab, labToHex, deltaE2000 } from '../src/domain/match.js';
 import { buildDesign, allocateQuantities, newDesignId, sequenceHexes } from '../src/domain/recipe.js';
 import { buildWeightedSequence, ARRANGEMENTS } from '../src/domain/patterns.js';
 import { extractMeasuredPalette, estimatePupil, classifyPalette } from '../src/scan.js';
@@ -68,7 +68,10 @@ const HAZEL_ZONES = [
   { tMax: 1.0, sectors: [['#8a8a4f', 0.45], ['#a89478', 0.35], ['#6b4a2f', 0.2]] }, // outer: olive / taupe / brown
 ];
 
-const qVector = (d) => Object.fromEntries(Object.entries(d.physical.quantities).map(([s, n]) => [s, n / d.physical.beadCount]));
+// Quantities keyed by the actual COLOUR, not by positional key — c00 means
+// "heaviest colour", which is a different colour in different designs.
+const qVector = (d) => Object.fromEntries(Object.entries(d.physical.quantities)
+  .map(([k, n]) => [d.measuredPalette.find((p) => p.key === k).hex, n / d.physical.beadCount]));
 const qL1 = (a, b) => [...new Set([...Object.keys(a), ...Object.keys(b)])].reduce((t, s) => t + Math.abs((a[s] ?? 0) - (b[s] ?? 0)), 0);
 const paletteDist = (p1, p2) => {
   const one = (a, b) => a.reduce((acc, e) => acc + Math.min(...b.map((f) => deltaE2000(e.lab, f.lab))), 0) / a.length;
@@ -79,7 +82,12 @@ const design = (palette, arrangement = 'dusk', size = 'M', id = 'EM-TST-AAAAAA')
     measuredPalette: palette, classification: classifyPalette(palette),
     arrangement, size, designId: id, now: () => '2026-08-04T00:00:00.000Z',
   });
-const nearest = (hx) => matchColorToBead(hx, activeBeads()).sku;
+// Palette signature: the measured colours themselves. No inventory anywhere.
+const paletteSig = (res) => (res.ok
+  ? res.palette.map((p) => p.hex).sort().join(',')
+  : `RETAKE:${res.reason}`);
+const hasColorNear = (res, hx, tol = 10) =>
+  res.ok && res.palette.some((p) => deltaE2000(p.lab, hexToLab(hx)) <= tol);
 
 /* ---- 1. colour science ---- */
 for (const [l1, l2, e] of [
@@ -89,14 +97,24 @@ for (const [l1, l2, e] of [
 ]) check(`deltaE2000(${e})`, near(deltaE2000(l1, l2), e));
 check('labToHex inverts hexToLab', labToHex(hexToLab('#8fa9bc')) === '#8fa9bc');
 
-/* ---- 2. inventory invariants ---- */
-const V1_SKUS = ['B001', 'B002', 'B003', 'B004', 'B005', 'B006'];
-const active = activeBeads();
-check('inventory status is physical V1', INVENTORY_STATUS === 'PHYSICAL_V1_APPROXIMATE_COLORS');
-check('active SKUs are exactly B001–B006',
-  JSON.stringify(active.map((b) => b.sku).sort()) === JSON.stringify(V1_SKUS));
-check('all active beads are nominally 6 mm', active.every((b) => b.diameterMm === 6));
-check('supplierRef is null everywhere', BEAD_INVENTORY.every((b) => b.supplierRef === null));
+/* ---- 2. ARCHITECTURE: the pipeline must be inventory-independent ---- */
+function walk(dir) {
+  return readdirSync(dir).flatMap((f) => {
+    const full = `${dir}/${f}`;
+    return statSync(full).isDirectory() ? walk(full) : [full];
+  });
+}
+const srcFiles = walk('src').filter((f) => f.endsWith('.js'));
+const stripComments = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+const offenders = srcFiles.filter((f) => {
+  const t = stripComments(readFileSync(f, 'utf8'));
+  return /from\s+['"][^'"]*inventory[^'"]*['"]/.test(t)
+    || /\bactiveBeads\b|\bBEAD_INVENTORY\b|\bmatchColorToBead\b|\bmatchPaletteToBeads\b/.test(t);
+});
+check('no file under src/ imports inventory or matches SKUs', offenders.length === 0, offenders.join(', '));
+check('inventory data lives outside the app', statSync('reference/bead-inventory-v1.js').isFile());
+check('no bead SKU literal appears anywhere in src/',
+  !srcFiles.some((f) => /\bB00[1-6]\b/.test(stripComments(readFileSync(f, 'utf8')))));
 
 /* ---- 3. pupil estimation ---- */
 const pupilFix = eyeCanvas({ pupil: { cx: 215, cy: 205, r: 75 }, irisR: 200, zones: HAZEL_ZONES });
@@ -126,11 +144,11 @@ check('regression fixture: gold vs olive perceptually distinct (ΔE>12)',
 check('regression fixture: radial zones are meaningful (gold inner, olive not inner)',
   !!goldE && !!oliveE && goldE.radialZone === 'inner' && oliveE.radialZone !== 'inner',
   `gold=${goldE?.radialZone} olive=${oliveE?.radialZone}`);
-check('true matches support ≥3 SKUs (gold→B005, olive→B004/B002, taupe/brown→B006/B001)',
-  nearest('#c9a95c') === 'B005' && ['B004', 'B002'].includes(nearest('#8a8a4f'))
-  && ['B006', 'B001'].includes(nearest('#a89478')));
+check('regression fixture: source gold AND olive both survive as measured colours',
+  hasColorNear(regRes, '#c9a95c', 14) && hasColorNear(regRes, '#8a8a4f', 14),
+  JSON.stringify(reg.map((p) => p.hex)));
 const regD = design(reg);
-check('regression recipe uses ≥3 SKUs', Object.keys(regD.physical.quantities).length >= 3,
+check('regression recipe uses ≥3 measured colours', Object.keys(regD.physical.quantities).length >= 3,
   JSON.stringify(regD.physical.quantities));
 const regAgain = extractMeasuredPalette(pupilFix);
 check('regression fixture: byte-identical on repeat', JSON.stringify(regAgain) === JSON.stringify(regRes));
@@ -164,7 +182,6 @@ for (const [k, r] of Object.entries(results)) {
 // and an absolute lightness cut would delete light-grey/light-blue irises.
 // The adaptive rule (L* > medianL+22 AND C* < 25) must remove it everywhere
 // while leaving every genuine iris type intact.
-const skusOf = (res) => (res.ok ? [...new Set(res.palette.map((p) => nearest(p.hex)))].sort() : null);
 const reflectionCases = {
   brown: '#7a5a32', hazelZones: null, blue: '#5a7fa0', lightGrey: '#b9bdc2', lightBlue: '#a6c4d6',
 };
@@ -173,24 +190,31 @@ for (const [label, hex] of Object.entries(reflectionCases)) {
   const clean = extractMeasuredPalette(eyeCanvas({ irisHex: hex }));
   const withRefl = extractMeasuredPalette(eyeCanvas({ irisHex: hex, reflection: REFLECTION }));
   check(`reflection/${label}: still extracts`, withRefl.ok, withRefl.reason);
-  check(`reflection/${label}: highlight adds no new bead family`,
-    withRefl.ok && clean.ok && JSON.stringify(skusOf(withRefl)) === JSON.stringify(skusOf(clean)),
-    `clean=${JSON.stringify(skusOf(clean))} withReflection=${JSON.stringify(skusOf(withRefl))}`);
+  // A highlight must never introduce a colour ALIEN to the iris. On dark and
+  // mid irises it is rejected outright; on a very light iris it is only a few
+  // L* above the iris itself, so it may survive — but then it is necessarily
+  // perceptually close to the iris's own colours. Both are acceptable; an
+  // alien colour is not.
+  const alien = withRefl.ok && clean.ok && withRefl.palette.filter((p) =>
+    !clean.palette.some((c) => deltaE2000(p.lab, c.lab) <= 20));
+  check(`reflection/${label}: highlight introduces no alien colour`,
+    withRefl.ok && clean.ok && alien.length === 0,
+    `clean=${paletteSig(clean)} withReflection=${paletteSig(withRefl)}`);
 }
 // The specific defect that motivated V2.1: a BROWN iris must not acquire the
 // blue-grey bead that the reflection alone would match.
 const brownRefl = extractMeasuredPalette(eyeCanvas({ irisHex: '#7a5a32', reflection: REFLECTION }));
-check('reflection: brown iris never yields B003 (the V2.1 defect)',
-  brownRefl.ok && !skusOf(brownRefl).includes('B003'), JSON.stringify(skusOf(brownRefl)));
+check('reflection: brown iris never acquires the highlight colour (the V2.1 defect)',
+  brownRefl.ok && !hasColorNear(brownRefl, REFLECTION.hex, 18), paletteSig(brownRefl));
 check('reflection: highlight pixels are actually being rejected',
   brownRefl.ok && brownRefl.diagnostics.specularRejected > 0,
   `rejected=${brownRefl.ok ? brownRefl.diagnostics.specularRejected : 'n/a'}`);
 // Multicolor iris keeps its real structure when a highlight is present.
 const hazelRefl = extractMeasuredPalette(eyeCanvas({ zones: HAZEL_ZONES, reflection: REFLECTION }));
 const hazelClean = extractMeasuredPalette(eyeCanvas({ zones: HAZEL_ZONES }));
-check('reflection: multicolor hazel keeps its bead families',
-  hazelRefl.ok && JSON.stringify(skusOf(hazelRefl)) === JSON.stringify(skusOf(hazelClean)),
-  `clean=${JSON.stringify(skusOf(hazelClean))} withReflection=${JSON.stringify(skusOf(hazelRefl))}`);
+check('reflection: multicolor hazel keeps its measured colours',
+  hazelRefl.ok && paletteSig(hazelRefl) === paletteSig(hazelClean),
+  `clean=${paletteSig(hazelClean)} withReflection=${paletteSig(hazelRefl)}`);
 // Light irises must survive the adaptive rule (an absolute cut would kill them).
 for (const [label, hex] of [['light grey', '#b9bdc2'], ['light blue', '#a6c4d6']]) {
   const r = extractMeasuredPalette(eyeCanvas({ irisHex: hex }));
@@ -201,13 +225,27 @@ for (const [label, hex] of [['light grey', '#b9bdc2'], ['light blue', '#a6c4d6']
 for (const [label, opts] of [['brown', { irisHex: '#7a5a32' }], ['hazel', { zones: HAZEL_ZONES }]]) {
   const clean = extractMeasuredPalette(eyeCanvas(opts));
   const lashy = extractMeasuredPalette(eyeCanvas({ ...opts, lashes: true }));
-  check(`lashes/${label}: no new bead family from eyelash shadow`,
-    lashy.ok && JSON.stringify(skusOf(lashy)) === JSON.stringify(skusOf(clean)),
-    `clean=${JSON.stringify(skusOf(clean))} lashes=${JSON.stringify(skusOf(lashy))}`);
+  const lashAlien = lashy.ok && clean.ok && lashy.palette.filter((p) =>
+    !clean.palette.some((c) => deltaE2000(p.lab, c.lab) <= 20));
+  check(`lashes/${label}: eyelash shadow introduces no alien colour`,
+    lashy.ok && lashAlien.length === 0,
+    `clean=${paletteSig(clean)} lashes=${paletteSig(lashy)}`);
 }
 // Very dark brown must still be measurable with the raised dark floor.
 const veryDark = extractMeasuredPalette(eyeCanvas({ irisHex: '#3a2a1c' }));
 check('very dark brown iris still extracts (dark floor L*15)', veryDark.ok, veryDark.reason);
+
+/* ---- 5c. NO ARBITRARY PALETTE CAP ---- */
+// A six-colour iris must yield six colours; significance (weight), not a cap,
+// decides. Diversity is never manufactured — see the uniform tests below.
+const sixColour = extractMeasuredPalette(eyeCanvas({ zones: [{ tMax: 1.0, sectors: [
+  ['#c9a95c', 1/6], ['#8a8a4f', 1/6], ['#a89478', 1/6],
+  ['#6b4a2f', 1/6], ['#4a7ec0', 1/6], ['#b9bdc2', 1/6]] }] }));
+check('six genuinely distinct colours all survive (no 3–5 cap)',
+  sixColour.ok && sixColour.palette.length >= 6,
+  sixColour.ok ? `${sixColour.palette.length}: ${paletteSig(sixColour)}` : sixColour.reason);
+check('six-colour design keeps all colours in the recipe',
+  sixColour.ok && Object.keys(design(sixColour.palette).physical.quantities).length >= 5);
 
 /* ---- 6. UNIFORM-EYE HONESTY ---- */
 const uniBrown = extractMeasuredPalette(eyeCanvas({ irisHex: '#7a5a32' }));
@@ -224,8 +262,12 @@ const greenHazel = extractMeasuredPalette(eyeCanvas({
   zones: [{ tMax: 1, sectors: [['#8a8a4f', 0.5], ['#c9a95c', 0.15], ['#a89478', 0.2], ['#6b4a2f', 0.15]] }],
 }));
 check('hazel A/B both extract', goldHazel.ok && greenHazel.ok);
-check('hazel A/B: quantity vectors differ (L1>0.2)',
-  qL1(qVector(design(goldHazel.palette)), qVector(design(greenHazel.palette))) > 0.2);
+check('hazel A/B: colour-keyed quantity vectors differ (L1>0.2)',
+  qL1(qVector(design(goldHazel.palette)), qVector(design(greenHazel.palette))) > 0.2,
+  `gold=${JSON.stringify(qVector(design(goldHazel.palette)))} green=${JSON.stringify(qVector(design(greenHazel.palette)))}`);
+check('hazel A/B: dominant colour genuinely differs',
+  goldHazel.palette[0].hex !== greenHazel.palette[0].hex
+  && deltaE2000(goldHazel.palette[0].lab, greenHazel.palette[0].lab) > 15);
 const blueGrey = extractMeasuredPalette(eyeCanvas({
   zones: [{ tMax: 1, sectors: [['#8fa4b5', 0.5], ['#7d8894', 0.3], ['#9fb2c0', 0.2]] }],
 }));
@@ -287,20 +329,28 @@ check('wild: same design id → same sequence',
   === JSON.stringify(design(reg, 'wild', 'M', 'EM-AAA-111111').physical.sequence));
 check('patterns differ from each other',
   new Set(ARRANGEMENTS.map((p) => JSON.stringify(design(reg, p).physical.sequence))).size === 3);
-const q = allocateQuantities({ B005: 0.3, B004: 0.25, B006: 0.45 }, 24);
+const q = allocateQuantities({ c00: 0.3, c01: 0.25, c02: 0.45 }, 24);
 check('allocation sums exactly to beadCount', Object.values(q).reduce((a, b) => a + b, 0) === 24);
-check('allocation ≈ proportions', q.B006 === 11 && q.B005 === 7 && q.B004 === 6);
-check('tiny cluster may get zero beads', !('B002' in allocateQuantities({ B003: 0.98, B002: 0.02 }, 24)));
+check('allocation ≈ proportions', q.c02 === 11 && q.c00 === 7 && q.c01 === 6, JSON.stringify(q));
+check('tiny colour may get zero beads', !('c01' in allocateQuantities({ c00: 0.98, c01: 0.02 }, 24)));
 
 /* ---- 10. SCHEMA v2 / PRIVACY / IDS / MULTI ---- */
-check('schemaVersion is 2', regD.schemaVersion === 2);
-check('design carries measuredPalette with hex/lab/weight/radialZone',
-  regD.measuredPalette.every((p) => p.hex && p.lab?.length === 3 && p.weight > 0 && p.radialZone));
+check('schemaVersion is 3', regD.schemaVersion === 3);
+check('design carries NO bead/SKU fields',
+  !('beadMatches' in regD) && !('beadDiametersMm' in regD.physical) && !/\bB00[1-6]\b/.test(JSON.stringify(regD)));
+check('design carries measuredPalette with key/hex/lab/weight/radial info',
+  regD.measuredPalette.every((p) => p.key && p.hex && p.lab?.length === 3 && p.weight > 0
+    && p.radialZone && typeof p.radialMean === 'number'));
 const json = JSON.stringify(regD);
 check('design round-trips losslessly', JSON.stringify(JSON.parse(json)) === json);
 check('no image data anywhere in the recipe', !/data:image|base64/i.test(json));
-check('sequence only V1 SKUs', regD.physical.sequence.every((s) => V1_SKUS.includes(s)));
-check('bead diameters resolve to [6]', JSON.stringify(regD.physical.beadDiametersMm) === '[6]');
+check('sequence references only this design\'s measured colours',
+  regD.physical.sequence.every((k) => regD.measuredPalette.some((p) => p.key === k)));
+check('sequenceHex matches measured colours position-for-position',
+  regD.physical.sequenceHex.every((hx, i) =>
+    hx === regD.measuredPalette.find((p) => p.key === regD.physical.sequence[i]).hex));
+check('every measured colour is preserved verbatim (never replaced/dropped)',
+  regD.measuredPalette.every((p, i) => p.hex === reg[i].hex && p.weight === reg[i].weight));
 const ids = new Set(Array.from({ length: 200 }, () => newDesignId('Aquamarine')));
 check('design id format + uniqueness', ids.size === 200 && [...ids].every((id) => /^EM-AQU-[A-HJ-NP-Z2-9]{6}$/.test(id)));
 const dA = design(reg, 'dusk', 'S', null);
@@ -318,7 +368,8 @@ for (const [label, res] of [
   if (!res.ok) { console.log(`${label}: RETAKE (${res.reason})`); continue; }
   const d = design(res.palette);
   console.log(`${label}\n  palette: ${res.palette.map((p) => `${p.hex}·${(p.weight * 100).toFixed(0)}%·${p.radialZone}`).join(' ')}`
-    + `\n  stone: ${d.stone} · recipe: ${Object.entries(d.physical.quantities).map(([s, n]) => `${s}×${n}`).join(' ')}`);
+    + `\n  stone: ${d.stone} · recipe: ${Object.entries(d.physical.quantities)
+        .map(([k, n]) => `${d.measuredPalette.find((p) => p.key === k).hex}×${n}`).join(' ')}`);
 }
 
 console.log(failures === 0 ? '\nALL CHECKS PASSED' : `\n${failures} CHECK(S) FAILED`);

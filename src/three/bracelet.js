@@ -142,11 +142,11 @@ export class Bracelet {
     this._applyArrangement(true);
   }
 
-  // PREVIEW POLICY (Measured Palette V1): the on-screen bracelet shows the
-  // physical product. `hexes` is the per-position bead colour list derived
-  // from the recipe's SKU sequence (recipe.sequenceHexes) — position i maps
-  // to bead i, so screen order === build order. If the physical bead count
+  // Render an explicit per-position colour list (recipe.sequenceHexes gives
+  // the design's measured iris colours in build order) — position i maps to
+  // bead i, so screen order === assembly order. If the physical bead count
   // ever differs from the rendered count, positions are index-scaled.
+  // Colour-agnostic: this method knows nothing about where the hexes came from.
   setSequence(hexes, fade = false) {
     this.shiftMode = false;
     const targets = this.gems.map((_, i) => {

@@ -27,20 +27,21 @@ npm run build # → dist/ (deploy anywhere static)
 | --- | --- |
 | `src/home.js` | Boots the 3D stage + scroll-scrubbed landing story; wires BEGIN into the flow |
 | `src/flow.js` | The BEGIN flow: bracelet count → capture → reveal → purchase; owns order state |
-| `src/scan.js` | Camera handling, iris color extraction, eye-color classification + palette |
+| `src/scan.js` | Camera, pupil/limbus estimation, iris sampling, contamination rejection |
 | `src/config.js` | Brand palette, bead count, checkout knobs, petal silhouette math |
 | `src/three/stage.js` | Renderer, camera, bloom, environment, parallax, specular sweep light |
 | `src/three/iris.js` | The living iris — custom GLSL shader (fibres, corona, breathing pupil, dissolve) |
 | `src/three/bracelet.js` | Polished natural-stone bead bracelet with procedural mineral textures |
-| `src/domain/inventory.js` | Physical bead catalog — **DEV PLACEHOLDER, not real supplier SKUs** |
-| `src/domain/match.js` | Palette → closest available bead (CIE Lab + CIEDE2000, deterministic) |
+| `src/domain/match.js` | Colour science: sRGB↔CIE Lab + CIEDE2000 (no inventory) |
+| `reference/bead-inventory-v1.js` | Physical bead catalog — **fulfillment reference, imported by nothing** |
 | `src/domain/patterns.js` | Shared Dusk/Cadence/Wild arrangement math (render + recipe use the same fn) |
 | `src/domain/sizes.js` | Size architecture — physical dims/bead counts are open decisions (nulls) |
 | `src/domain/recipe.js` | `BraceletDesign` — the serializable, buildable recipe + design IDs |
-| `scripts/verify-domain.mjs` | No-framework verification of matching/recipes (`node scripts/verify-domain.mjs`) |
+| `src/domain/palette.js` | Deterministic Lab clustering → the measured palette |
+| `scripts/verify-domain.mjs` | No-framework verification (`node scripts/verify-domain.mjs`) |
 | `public/brand/` | Official logo/icon SVGs (copied from `../Branding Elements/LOGO/`) |
 
-## Domain model: measured-color-first (Measured Palette V1)
+## Domain model: measured-colour-first, inventory-independent
 
 The physical bracelet is derived from the customer's **particular iris**, not
 from an eye-colour category:
@@ -53,13 +54,13 @@ pixels (480² canvas, ephemeral)
 → adaptive contamination rejection: dark floor L*15 (pupil margin, eyelashes)
   plus a specular rule measured against THIS iris's own median lightness
   (reject L* > median+22 with C* < 25), so a window/sky highlight on the
-  cornea can never become a bead colour while light-grey and light-blue
+  cornea cannot contaminate the palette, while light-grey and light-blue
   irises — just as bright, but not brighter than their own median — survive
 → deterministic CIE Lab clustering (merge ΔE 7)
-  → measuredPalette: 3–5 × {hex, lab, weight, radialZone (pupil-relative)}
-→ CIEDE2000 match per colour → physical SKUs with honest ΔE + weight
-→ weights → exact bead quantities (largest remainder)
-→ Dusk/Cadence/Wild weighted placement → position-by-position SKU sequence
+→ measuredPalette: every significant colour (no cap), each with
+  {hex, lab, weight, radialZone, radialMean}
+→ weights → exact bead quantities per colour (largest remainder)
+→ Dusk/Cadence/Wild weighted placement → position-by-position colour sequence
 ```
 
 Pupil-anchored sampling means the same iris measures the same regardless of
@@ -72,59 +73,39 @@ Classification (blue/green/brown/hazel/grey → stone name) is **metadata
 only** — naming, UI copy, iris-shader styling. It can never create or
 overwrite the physical palette. An unclear capture (too few iris pixels, or
 too much glare/contamination) becomes an explicit **retake** — never a
-guessed canonical palette. **Preview policy:** the 3-D bracelet renders the
-matched physical bead colours — what EyeMatch will actually build — not an
-idealised version of the iris.
+guessed canonical palette. **Preview policy:** the 3-D bracelet renders the **measured iris colours**
+directly, in the exact per-position order the recipe specifies. It is a
+faithful picture of the measurement; the physical bracelet is assembled later
+from whatever real beads best match those colours.
 
 Each scanned bracelet gets a **`BraceletDesign`** (`src/domain/recipe.js`,
-schemaVersion 2): measured palette, per-colour bead matches (ΔE never
-hidden), arrangement, size, and the exact SKU sequence + quantities a
-fulfillment worker needs. The design ID (`EM-GOL-7K3M9Q` style,
+schemaVersion 3): the measured palette, arrangement, size, and the exact
+per-position colour sequence (`sequence` + `sequenceHex`) and per-colour
+`quantities` an assembler needs. The design ID (`EM-GOL-7K3M9Q` style,
 crypto-random, no personal data) is the future order handle; the recipe is
 the source of truth. Inspect live designs via `__flow.designs()`.
 
-### Physical Inventory V1
+### Physical inventory — deliberately outside the app
 
-EyeMatch Physical Inventory V1 consists of **six internal bead families:
-`B001`–`B006`**, all nominally **6 mm** round, polished
-(`src/domain/inventory.js`):
+EyeMatch owns six real 6 mm bead families (`B001`–`B006`). That catalog lives
+in **`reference/bead-inventory-v1.js`** and is **imported by nothing**. The
+scanner, the personalization pipeline, the 3-D preview and order creation are
+all **inventory-independent**: a measured colour is never replaced, merged or
+discarded because current stock lacks a near match, and the scanner does not
+know which beads we own. A verification check enforces the no-import rule.
 
-| SKU | Family | Serves |
-| --- | --- | --- |
-| B001 | grey-taupe (high variation) | grey, brown, hazel |
-| B002 | light-green | green, hazel |
-| B003 | blue-grey | blue, grey |
-| B004 | muted-green | green, hazel, grey |
-| B005 | champagne | hazel, golden highlights, brown |
-| B006 | taupe-brown-veined (high variation) | brown, hazel, grey/brown details |
-
-Important properties of this catalog:
-
-- **SKU identity is intentionally decoupled from supplier identity.** B001–B006
-  name visual/material families that EyeMatch controls; `supplierRef` is null
-  and the same SKU may later be sourced elsewhere if visually close enough.
-- **No exact mineral identities are claimed** — supplier information is not
-  reliable enough to verify them.
-- **Representative hex colors are approximate V1 calibration values**, chosen
-  to sit near the centre of each family's visual range. They may be
-  recalibrated after controlled physical color measurement — recalibration
-  must never change SKU identity.
-- **Natural variation exists within families** (recorded per-bead as
-  `variation: low|medium|high` + an appearance description); fulfillment
-  selects visually appropriate individual beads from the requested family.
-- Stock quantities are deliberately not modelled — that belongs to a future
-  order/operations layer.
-
-Still placeholder: the 24-bead-per-size fallback in `src/domain/sizes.js`
-(final S/M/L circumference and bead counts are open decisions).
+Colour→bead matching happens at **assembly time**, by a human, against
+whatever stock actually exists then — not at scan time against a snapshot.
+The design hands them a per-position colour sequence and per-colour bead
+counts; they pick the closest bead they physically hold.
 
 ## Privacy boundary
 
 - **Raw eye image** — browser-local and ephemeral. It is drawn to an in-memory
   `<canvas>`, read once for colour, and never persisted, never uploaded, never
   placed in a recipe. Closing the tab destroys it.
-- **Derived design data** — eye-color classification, generated palette, bead
-  matches, recipe, design ID. Contains nothing that can reconstruct the image.
+- **Derived design data** — eye-color classification, measured palette,
+  recipe, design ID. Contains nothing that can reconstruct the image.
   Currently lives only in page memory (no localStorage, no network).
 - **Future order data** — when commerce is built, an order may carry the
   derived design/recipe, but must never include the raw eye image.

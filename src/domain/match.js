@@ -112,27 +112,12 @@ export function deltaE2000(lab1, lab2) {
   );
 }
 
-/* ---------- matching ---------- */
-
-// Match one desired colour against the given beads (assumed pre-filtered to
-// ACTIVE only — see inventory.activeBeads). Deterministic tie-break: lower
-// deltaE first, then lexicographically smaller SKU.
-export function matchColorToBead(desiredHex, beads) {
-  if (!beads.length) throw new Error('matchColorToBead: no beads to match against');
-  const desired = hexToLab(desiredHex);
-  let best = null;
-  for (const bead of beads) {
-    const dE = deltaE2000(desired, hexToLab(bead.hex));
-    if (!best || dE < best.deltaE - 1e-9
-      || (Math.abs(dE - best.deltaE) <= 1e-9 && bead.sku < best.sku)) {
-      best = { desiredHex, sku: bead.sku, beadHex: bead.hex, beadName: bead.name, deltaE: dE };
-    }
-  }
-  return best;
-}
-
-// Match a whole generated palette (array of hex strings), preserving order —
-// result[i] corresponds to palette slot i.
-export function matchPaletteToBeads(paletteHexes, beads) {
-  return paletteHexes.map((hex) => matchColorToBead(hex, beads));
-}
+/* ----------------------------------------------------------------------
+   NOTE: bead/SKU matching deliberately does NOT live here (removed with
+   schemaVersion 3). The scanner and the design pipeline are inventory-
+   independent: they measure and record the iris's actual colours, and a
+   human matches those to whatever real beads exist at assembly time.
+   deltaE2000 above remains because perceptual distance is needed to MERGE
+   measured clusters in domain/palette.js — that is colour science, not
+   inventory lookup.
+   ---------------------------------------------------------------------- */

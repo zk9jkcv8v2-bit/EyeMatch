@@ -72,9 +72,11 @@ export function createFlow(ctx) {
     return member;
   }
 
-  // PREVIEW POLICY: the 3-D bracelet always shows the PHYSICAL bead colours
-  // from the recipe sequence — what we can actually build, not an idealised
-  // version of the iris.
+  // PREVIEW POLICY (schemaVersion 3): the 3-D bracelet shows the MEASURED
+  // IRIS COLOURS, in the exact per-position order the recipe specifies. The
+  // preview is a faithful picture of the measurement, not of current bead
+  // stock — the physical bracelet is assembled later from whatever real beads
+  // best match these colours.
   function showDesignOnBracelet(member, fade = false) {
     bracelet.setSequence(sequenceHexes(member.design), fade);
   }
@@ -474,19 +476,15 @@ export function createFlow(ctx) {
       const row = document.createElement('div');
       row.className = 'set-member';
 
-      // Strand swatches show the PHYSICAL bead colours of this member's
-      // recipe, heaviest family first — screen == what we build.
+      // Strand swatches show this member's MEASURED iris colours, heaviest
+      // first (palette is already ordered by weight).
       const strand = document.createElement('div');
       strand.className = 'set-strand';
-      const hexBySku = {};
-      member.design.beadMatches.forEach((m) => { hexBySku[m.sku] = m.beadHex; });
-      Object.entries(member.design.physical.quantities)
-        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-        .forEach(([sku]) => {
-          const s = document.createElement('span');
-          s.style.background = swatchGradient(hexBySku[sku]);
-          strand.appendChild(s);
-        });
+      member.design.measuredPalette.forEach((p) => {
+        const s = document.createElement('span');
+        s.style.background = swatchGradient(p.hex);
+        strand.appendChild(s);
+      });
 
       const meta = document.createElement('div');
       meta.className = 'set-meta';

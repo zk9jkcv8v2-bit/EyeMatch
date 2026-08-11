@@ -1,31 +1,35 @@
-// BraceletDesign v2 — the serializable recipe for one personalized bracelet.
+// BraceletDesign v3 — the serializable recipe for one personalized bracelet.
 //
-// MEASURED-COLOR-FIRST (schemaVersion 2): the physical palette is derived
-// from the customer's measured iris palette, matched per-colour to the
-// physical inventory, with measured WEIGHTS driving bead quantities.
-// Eye-colour classification is metadata only (stone naming, UI copy) and
-// can never create or overwrite the physical palette.
+// INVENTORY-INDEPENDENT (schemaVersion 3). A design is built ONLY from what
+// the scanner measured in this particular iris. There is no bead catalog, no
+// SKU matching and no colour substitution anywhere in this file — a measured
+// colour is never replaced, merged or discarded because some current bead
+// stock happens to lack a near match.
+//
+// The physical bracelet is assembled LATER, by a human, using whatever real
+// beads exist at that time: the recipe hands them a per-position colour
+// sequence and per-colour quantities, and they pick the closest bead they
+// actually hold. Colour→bead matching therefore happens at fulfillment time
+// against current stock, not at scan time against a snapshot.
 //
 //   PRIVACY BOUNDARY
 //   ----------------
 //   The raw eye image NEVER enters a design. It lives on a local <canvas>,
 //   is read once for colour, and is never persisted or transmitted. A recipe
 //   holds nothing that could reconstruct the photo — only derived colours,
-//   matched bead SKUs and layout.
+//   weights and layout.
 //
 // A design is plain JSON-safe data (no class instances, no functions) so it
 // can later be attached to an order, logged, or re-rendered as-is. The
 // recipe is the source of truth; the design ID is just a handle for humans.
 
-import { activeBeads } from './inventory.js';
-import { matchColorToBead, hexToLab } from './match.js';
 import { buildWeightedSequence } from './patterns.js';
 import { physicalBeadCount } from './sizes.js';
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 // Human-readable design ID, e.g. "EM-AQU-7K3M9Q".
-//   - "EM" brand prefix, three letters of the matched stone (support staff can
+//   - "EM" brand prefix, three letters of the stone name (support staff can
 //     sanity-check an order at a glance), 6 random chars.
 //   - Alphabet omits 0/O/1/I/L so IDs survive being read over the phone.
 //   - Randomness comes from crypto.getRandomValues (never Math.random); it is
@@ -41,113 +45,101 @@ export function newDesignId(stoneName = '') {
   return `EM-${prefix}-${rand}`;
 }
 
-// Turn merged SKU weights into exact integer bead quantities via the largest
-// remainder method: floors first, then the leftover beads go to the largest
-// fractional parts (ties: heavier weight, then SKU order). Always sums to
-// `total`; small clusters may legitimately round to zero beads.
-export function allocateQuantities(weightsBySku, total) {
-  const entries = Object.entries(weightsBySku);
+// Stable key for palette entry i. Zero-padded so lexicographic order (used as
+// a deterministic tie-break downstream) matches numeric order at any length.
+export const colorKey = (i) => `c${String(i).padStart(2, '0')}`;
+
+// Turn per-colour weights into exact integer bead counts via the largest
+// remainder method: floors first, then leftover beads go to the largest
+// fractional parts (ties: heavier weight, then key order). Always sums to
+// `total`; a very small colour may legitimately round to zero beads.
+export function allocateQuantities(weightsByKey, total) {
+  const entries = Object.entries(weightsByKey);
   const wSum = entries.reduce((a, [, w]) => a + w, 0);
-  const exact = entries.map(([sku, w]) => {
+  const exact = entries.map(([key, w]) => {
     const share = (w / wSum) * total;
-    return { sku, w, floor: Math.floor(share), frac: share - Math.floor(share) };
+    return { key, w, floor: Math.floor(share), frac: share - Math.floor(share) };
   });
   let left = total - exact.reduce((a, e) => a + e.floor, 0);
-  exact.sort((x, y) => y.frac - x.frac || y.w - x.w || x.sku.localeCompare(y.sku));
+  exact.sort((x, y) => y.frac - x.frac || y.w - x.w || x.key.localeCompare(y.key));
   for (let i = 0; left > 0; i = (i + 1) % exact.length, left--) exact[i].floor++;
   const q = {};
-  for (const e of exact.sort((x, y) => x.sku.localeCompare(y.sku))) {
-    if (e.floor > 0) q[e.sku] = e.floor;
+  for (const e of exact.sort((x, y) => x.key.localeCompare(y.key))) {
+    if (e.floor > 0) q[e.key] = e.floor;
   }
   return q;
 }
 
-// Map a design's sequence to renderable physical bead hexes.
-export function sequenceHexes(design, inventory = activeBeads()) {
-  const hexBySku = Object.fromEntries(inventory.map((b) => [b.sku, b.hex]));
-  return design.physical.sequence.map((sku) => hexBySku[sku]);
+// Per-position measured colours, for rendering and for manual assembly.
+export function sequenceHexes(design) {
+  return design.physical.sequenceHex.slice();
 }
 
 // Assemble a complete BraceletDesign from a measured palette + choices.
 //
-//   measuredPalette — [{ hex, lab, weight, radialZone }] from domain/palette.js
-//                     (weights normalized to 1)
-//   classification  — { category, variant, stone } metadata from scan.classifyPalette
+//   measuredPalette — [{ hex, lab, weight, radialZone, radialMean }] from
+//                     domain/palette.js (weights normalized to 1)
+//   classification  — { category, variant, stone } metadata from
+//                     scan.classifyPalette — naming/copy ONLY
 //   arrangement     — 'dusk' | 'cadence' | 'wild'
 //   size            — 'S' | 'M' | 'L'
 //   designId        — pass an existing ID to keep it stable across pattern/size
 //                     edits of the same bracelet; omitted → a new one is minted
-//   inventory/now   — injectable for tests
+//   now             — injectable clock for tests
 //
 // Deterministic given (measuredPalette, classification, arrangement, size,
-// inventory, designId): everything except a freshly-minted id/createdAt is a
-// pure function of the inputs (wild's ordering is seeded by the design id).
+// designId): everything except a freshly-minted id/createdAt is a pure
+// function of the inputs (wild's ordering is seeded by the design id).
 export function buildDesign({
   measuredPalette,
   classification,
   arrangement,
   size,
   designId,
-  inventory = activeBeads(),
   now = () => new Date().toISOString(),
 }) {
   const id = designId ?? newDesignId(classification.stone);
 
-  // Per-measured-colour physical match, with weight and honest ΔE.
-  const beadMatches = measuredPalette.map((p) => {
-    const m = matchColorToBead(p.hex, inventory);
-    return {
-      measuredHex: p.hex,
-      sku: m.sku,
-      beadHex: m.beadHex,
-      deltaE: Math.round(m.deltaE * 100) / 100,
-      weight: p.weight,
-    };
-  });
+  // Every measured colour gets a key and keeps its measured weight. No
+  // matching, no merging, no substitution.
+  const palette = measuredPalette.map((p, i) => ({ key: colorKey(i), ...p }));
 
-  // Merge weights of measured colours that landed on the same SKU — the
-  // physical bracelet reflects total per-family proportions.
-  const weightsBySku = {};
-  for (const m of beadMatches) weightsBySku[m.sku] = (weightsBySku[m.sku] ?? 0) + m.weight;
+  const weightsByKey = {};
+  for (const p of palette) weightsByKey[p.key] = p.weight;
 
   const beadCount = physicalBeadCount(size);
-  const quantities = allocateQuantities(weightsBySku, beadCount);
+  const quantities = allocateQuantities(weightsByKey, beadCount);
 
-  const bead = (sku) => inventory.find((b) => b.sku === sku);
-  const entries = Object.entries(quantities).map(([sku, count]) => ({
-    sku, count, l: hexToLab(bead(sku).hex)[0],
+  // Placement uses each colour's own Lab L* — no bead lookup.
+  const entries = Object.entries(quantities).map(([key, count]) => ({
+    key, count, l: palette.find((p) => p.key === key).lab[0],
   }));
   const sequence = buildWeightedSequence(entries, arrangement, beadCount, id);
-
-  const diameters = [...new Set(Object.keys(quantities).map((sku) => bead(sku)?.diameterMm))]
-    .filter((d) => d != null);
+  const hexByKey = Object.fromEntries(palette.map((p) => [p.key, p.hex]));
 
   return {
     schemaVersion: SCHEMA_VERSION,
     designId: id,
     createdAt: now(),
 
-    // classification is METADATA (naming/copy) — it never chose the beads
+    // classification is METADATA (naming/copy) — it never shapes the palette
     eye: { category: classification.category, variant: classification.variant },
     stone: classification.stone,
 
-    // what we measured from THIS iris (derived colours only — never pixels)…
-    measuredPalette: measuredPalette.map((p) => ({ ...p })),
-
-    // …and how each measured colour maps to the physical catalog, with match
-    // quality (CIEDE2000) exposed so bad matches are visible, never hidden.
-    beadMatches,
+    // what we measured from THIS iris (derived colours only — never pixels).
+    // This is the source of truth an assembler works from.
+    measuredPalette: palette.map((p) => ({ ...p })),
 
     // customer choices
     arrangement,
     size,
 
-    // the buildable spec
+    // the buildable spec — colours and positions, no bead identities
     physical: {
       beadCount,
-      beadDiametersMm: diameters,      // [6] for Inventory V1
-      sequence,                        // position → SKU, clockwise from top
-      quantities,
+      sequence,                                   // position → colour key, clockwise from top
+      sequenceHex: sequence.map((k) => hexByKey[k]), // same, resolved to measured colours
+      quantities,                                 // colour key → number of beads
     },
   };
 }

@@ -28,15 +28,18 @@ export function colorIndexFor(pattern, i, count, n) {
 /* ============================================================
    Weighted placement (Measured Palette V1)
 
-   The physical recipe now allocates an exact bead COUNT per SKU from the
-   measured palette weights. These placers arrange those exact quantities
-   around the wrist while keeping each pattern's visual identity:
+   The recipe allocates an exact bead COUNT per MEASURED COLOUR from that
+   colour's weight. These placers arrange those exact quantities around the
+   wrist while keeping each pattern's visual identity:
 
-     dusk    — lightness gradient: lightest beads at the top of the wrist,
-               darkest at the bottom (uses Lab L* of the PHYSICAL bead hex)
+     dusk    — lightness gradient: lightest at the top of the wrist, darkest
+               at the bottom (uses Lab L* of the MEASURED colour)
      cadence — proportional rhythmic interleave (error-diffusion spacing)
      wild    — organic scatter via a seeded deterministic shuffle
                (seed = design id; NO Math.random anywhere)
+
+   The placers are colour-agnostic: they operate on opaque keys, so they know
+   nothing about bead inventory and never will.
 
    Every placer consumes exactly the allocated quantities — the sequence
    multiset always equals `quantities`. Fully deterministic.
@@ -63,8 +66,9 @@ function mulberry32(seed) {
   };
 }
 
-// entries: [{ sku, l, count }] — l is Lab L* of the physical bead colour;
-// counts must sum to beadCount. seed: any stable string (the design id).
+// entries: [{ key, l, count }] — `key` is an opaque stable identifier (the
+// recipe passes a measured-palette key such as 'c00'); `l` is that colour's
+// Lab L*; counts must sum to beadCount. seed: any stable string (the design id).
 export function buildWeightedSequence(entries, pattern, beadCount, seed = '') {
   const totalCount = entries.reduce((a, e) => a + e.count, 0);
   if (totalCount !== beadCount) {
@@ -72,9 +76,9 @@ export function buildWeightedSequence(entries, pattern, beadCount, seed = '') {
   }
 
   if (pattern === 'cadence') {
-    // Error-diffusion interleave: at each position, emit the SKU with the
-    // greatest accumulated entitlement. Evenly spaces every family.
-    const sorted = [...entries].sort((x, y) => y.count - x.count || x.sku.localeCompare(y.sku));
+    // Error-diffusion interleave: at each position, emit the colour with the
+    // greatest accumulated entitlement. Evenly spaces every colour.
+    const sorted = [...entries].sort((x, y) => y.count - x.count || x.key.localeCompare(y.key));
     const acc = sorted.map(() => 0);
     const remaining = sorted.map((e) => e.count);
     const seq = [];
@@ -85,7 +89,7 @@ export function buildWeightedSequence(entries, pattern, beadCount, seed = '') {
         acc[j] += sorted[j].count;
         if (pick === -1 || acc[j] > acc[pick]) pick = j;
       }
-      seq.push(sorted[pick].sku);
+      seq.push(sorted[pick].key);
       acc[pick] -= beadCount;
       remaining[pick]--;
     }
@@ -95,8 +99,8 @@ export function buildWeightedSequence(entries, pattern, beadCount, seed = '') {
   if (pattern === 'wild') {
     // Exact multiset, deterministically shuffled from the design id.
     const multiset = [...entries]
-      .sort((x, y) => x.sku.localeCompare(y.sku))
-      .flatMap((e) => Array(e.count).fill(e.sku));
+      .sort((x, y) => x.key.localeCompare(y.key))
+      .flatMap((e) => Array(e.count).fill(e.key));
     const rng = mulberry32(hashSeed(seed));
     for (let i = multiset.length - 1; i > 0; i--) {
       const j = Math.floor(rng() * (i + 1));
@@ -106,15 +110,15 @@ export function buildWeightedSequence(entries, pattern, beadCount, seed = '') {
   }
 
   // dusk — rank positions by height on the wrist (top first), then pour the
-  // SKUs in lightness order (lightest first) into the highest positions.
+  // colours in lightness order (lightest first) into the highest positions.
   const positions = Array.from({ length: beadCount }, (_, i) => ({
     i, h: (Math.sin((i / beadCount) * TAU) + 1) / 2,
   })).sort((x, y) => y.h - x.h || x.i - y.i);
-  const byLight = [...entries].sort((x, y) => y.l - x.l || x.sku.localeCompare(y.sku));
+  const byLight = [...entries].sort((x, y) => y.l - x.l || x.key.localeCompare(y.key));
   const seq = new Array(beadCount);
   let p = 0;
   for (const e of byLight) {
-    for (let k = 0; k < e.count; k++) seq[positions[p++].i] = e.sku;
+    for (let k = 0; k < e.count; k++) seq[positions[p++].i] = e.key;
   }
   return seq;
 }

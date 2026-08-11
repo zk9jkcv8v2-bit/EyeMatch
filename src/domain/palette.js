@@ -21,7 +21,11 @@ const AB_BIN = 12;           // Lab grid: a*/b* bin width
 // physical beads (B005 vs B006). 7 preserves that distinction on the real
 // regression photo while uniform fixtures still collapse to one cluster.
 const MERGE_DE = 7;
-const MAX_COLORS = 5;        // palette ceiling
+// NO maximum colour count. A palette is however many colours the iris
+// genuinely contains: significance is decided by MIN_CLUSTER_WEIGHT (a
+// perceptual/statistical criterion), never by an arbitrary cap. A uniform
+// iris still yields exactly one colour — diversity is never manufactured,
+// but genuine diversity is never truncated either.
 const MIN_CLUSTER_WEIGHT = 0.05; // clusters below 5% of accepted pixels are noise
 const MIN_SAMPLES = 500;     // fewer accepted pixels than this → retake, never guess
 const MAX_CONTAMINATED = 0.45;   // if >45% of pixel weight is pruned as contamination → retake
@@ -103,16 +107,17 @@ export function buildMeasuredPalette(pixels) {
     return { ok: false, reason: 'no-usable-color', diagnostics };
   }
 
-  // 5. Top MAX_COLORS by weight; normalize weights over what we keep.
-  //    (A genuinely uniform iris yields ONE entry — diversity is never faked.)
-  const top = kept.slice(0, MAX_COLORS);
-  const keptTotal = top.reduce((a, c) => a + c.n, 0);
+  // 5. Every significant colour survives — no cap. Weights normalize over
+  //    what we keep. (A genuinely uniform iris yields ONE entry; a genuinely
+  //    varied iris keeps all of its colours.)
+  const keptTotal = kept.reduce((a, c) => a + c.n, 0);
   const zone = (t) => (t < 1 / 3 ? 'inner' : t < 2 / 3 ? 'mid' : 'outer');
-  const palette = top.map((cl) => ({
+  const palette = kept.map((cl) => ({
     hex: labToHex(cl.lab),
     lab: cl.lab.map((v) => +v.toFixed(2)),
     weight: +(cl.n / keptTotal).toFixed(4),
     radialZone: zone(cl.r),
+    radialMean: +cl.r.toFixed(3),
   }));
   // deterministic order: weight desc, then hex
   palette.sort((x, y) => y.weight - x.weight || (x.hex < y.hex ? -1 : 1));

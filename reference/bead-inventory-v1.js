@@ -1,5 +1,17 @@
 // ============================================================================
-// EYEMATCH PHYSICAL INVENTORY — V1
+// EYEMATCH PHYSICAL INVENTORY — V1   ·   FULFILLMENT REFERENCE ONLY
+//
+// ⛔ NOT PART OF THE APPLICATION. Nothing under src/ imports this file, and
+//    nothing ever should. The scanner, the personalization pipeline, the 3-D
+//    preview and order creation are all INVENTORY-INDEPENDENT: they measure
+//    and record the iris's actual colours and never substitute a bead colour
+//    for a measured one.
+//
+//    This file exists so a human assembling a bracelet (or a future
+//    fulfillment tool) has a record of what stock the V1 catalog described.
+//    Matching a design's measured colours to real beads happens at ASSEMBLY
+//    time, against whatever stock actually exists then — not at scan time
+//    against a snapshot. A verification check enforces the no-import rule.
 //
 // Six real bead families that EyeMatch physically owns, all nominally 6 mm
 // round, polished. SKUs B001–B006 are EYEMATCH-CONTROLLED identifiers:
