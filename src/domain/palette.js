@@ -30,6 +30,34 @@ const MIN_CLUSTER_WEIGHT = 0.05; // clusters below 5% of accepted pixels are noi
 const MIN_SAMPLES = 500;     // fewer accepted pixels than this → retake, never guess
 const MAX_CONTAMINATED = 0.45;   // if >45% of pixel weight is pruned as contamination → retake
 
+// --- COALITION RESCUE (V2.2) ------------------------------------------------
+// The blue-eye regression proved a real anatomical region can be split by the
+// Lab grid into several sub-threshold clusters that are individually discarded
+// even though together they clear the floor. In that photo the peri-pupillary
+// gold ring survived sampling and every filter intact, formed its own clean
+// cluster at 1.6%, and was then dropped — while a perceptually adjacent
+// fragment sat at 3.8% right next to it (ΔE 7.7, Δradial 0.10).
+//
+// So: BEFORE the 5% floor is applied, sub-threshold clusters that are BOTH
+// perceptually close AND in the same radial zone may form a coalition. A
+// coalition of two or more whose combined weight clears the floor is admitted
+// as ONE colour (its weighted mean) — the same thing clustering already does,
+// applied once more with a spatial constraint.
+//
+// Why this rejects noise and reflections: a lone artifact has no partner, and
+// a coalition of one is never rescued. Verified: every uniform-iris and
+// reflection fixture produces zero sub-threshold clusters, so the rescue path
+// cannot reach them at all.
+//
+// Constants are measured, not guessed. COALITION_DE must clear the 7.7 seen
+// between the real gold fragments while staying well under the ~15-16 that
+// separates genuinely different colours in the same photo. COALITION_RADIAL
+// keeps a coalition inside one radial third (zones are 0.333 wide), so an
+// inner ring can never coalesce with outer-iris tissue.
+const COALITION_DE = 10;      // > MERGE_DE(7): related-but-distinct, never "same colour"
+const COALITION_RADIAL = 0.25; // same anatomical band only
+const COALITION_MIN_MEMBERS = 2;
+
 import { deltaE2000, labToHex } from './match.js';
 
 // Cluster-level contamination rules. Deliberately conservative: the old
@@ -90,19 +118,49 @@ export function buildMeasuredPalette(pixels) {
   }
   diagnostics.clusters = clusters.length;
 
-  // 4. Prune contamination + noise; track how much we threw away.
+  // 4. Prune contamination, then split what remains by the significance floor.
   const total = pixels.length;
   let pruned = 0;
-  const kept = [];
+  const strong = [], weak = [];
   for (const cl of clusters.sort((x, y) => y.n - x.n)) {
     if (isContaminant(cl.lab)) { pruned += cl.n; continue; }
-    if (cl.n / total < MIN_CLUSTER_WEIGHT) continue; // noise: dropped from palette, not "contamination"
-    kept.push(cl);
+    (cl.n / total < MIN_CLUSTER_WEIGHT ? weak : strong).push(cl);
   }
   diagnostics.prunedWeight = +(pruned / total).toFixed(3);
   if (pruned / total > MAX_CONTAMINATED) {
     return { ok: false, reason: 'contaminated', diagnostics };
   }
+
+  // 4b. Coalition rescue — see the COALITION_* note above. Greedy against each
+  //     coalition's running centroid (the same shape as the cell merge), so a
+  //     chain of small steps can never drag a coalition far from where it
+  //     started. `weak` is already ordered by weight, keeping this deterministic.
+  const coalitions = [];
+  for (const cl of weak) {
+    let home = null;
+    for (const c of coalitions) {
+      if (deltaE2000(cl.lab, c.lab) <= COALITION_DE
+        && Math.abs(cl.r - c.r) <= COALITION_RADIAL) { home = c; break; }
+    }
+    if (!home) {
+      coalitions.push({ n: cl.n, lab: [...cl.lab], r: cl.r, members: 1 });
+    } else {
+      const t = home.n + cl.n;
+      home.lab = home.lab.map((v, i) => (v * home.n + cl.lab[i] * cl.n) / t);
+      home.r = (home.r * home.n + cl.r * cl.n) / t;
+      home.n = t;
+      home.members++;
+    }
+  }
+  // The 5% floor stays the final safety mechanism — a coalition must clear it
+  // too, and a lone fragment (an isolated reflection or speckle) never can.
+  const rescued = coalitions.filter(
+    (c) => c.members >= COALITION_MIN_MEMBERS && c.n / total >= MIN_CLUSTER_WEIGHT,
+  );
+  diagnostics.rescued = rescued.length;
+  diagnostics.rescuedWeight = +(rescued.reduce((a, c) => a + c.n, 0) / total).toFixed(3);
+
+  const kept = [...strong, ...rescued].sort((x, y) => y.n - x.n);
   if (!kept.length) {
     return { ok: false, reason: 'no-usable-color', diagnostics };
   }

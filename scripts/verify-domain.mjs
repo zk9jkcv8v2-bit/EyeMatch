@@ -28,6 +28,7 @@ function eyeCanvas({
   pupil = { cx: 240, cy: 240, r: 55 }, irisR = 190, zones = [],
   irisHex = null, scleraHex = '#ece7e0', pupilHex = '#0a0908', eyelidY = null, skinHex = '#d8b6a0',
   reflection = null, lashes = false,
+  ringHex = null, ringLo = 0, ringHi = 0, noise = 0,
 } = {}) {
   const data = new Uint8ClampedArray(SIZE * SIZE * 4);
   const sclera = hex2rgb(scleraHex), pup = hex2rgb(pupilHex), skin = hex2rgb(skinHex);
@@ -50,9 +51,18 @@ function eyeCanvas({
           px = (zone.cum.find(([, c]) => angFrac <= c + 1e-9) ?? zone.cum[zone.cum.length - 1])[0];
         }
       } else px = sclera;
+      // Thin peri-pupillary ring (the blue-eye gold-ring analogue).
+      if (ringHex && d >= pupil.r * ringLo && d <= pupil.r * ringHi) px = hex2rgb(ringHex);
       // Specular highlight: a window/sky reflected on the cornea, sitting
       // INSIDE the iris — the real-world contamination V2.1 must reject.
       if (reflection && Math.hypot(x - reflection.cx, y - reflection.cy) < reflection.r) px = hex2rgb(reflection.hex);
+      // Deterministic texture (NO Math.random). Flat fixtures produce zero
+      // sub-threshold clusters, so without this the coalition path is untested.
+      if (noise) {
+        const h = Math.imul((x * 73856093) ^ (y * 19349663), 0x45d9f3b);
+        const n = (((h >>> 8) & 0xff) / 255 - 0.5) * 2 * noise;
+        px = [px[0] + n, px[1] + n, px[2] + n];
+      }
       // Eyelash streaks: dark but above the old L*12 floor.
       if (lashes && y < pupil.cy && ((x * 7 + y * 3) % 29) < 4 && d < irisR) px = [34, 28, 24];
       const i = (y * SIZE + x) * 4;
@@ -247,12 +257,54 @@ check('six genuinely distinct colours all survive (no 3–5 cap)',
 check('six-colour design keeps all colours in the recipe',
   sixColour.ok && Object.keys(design(sixColour.palette).physical.quantities).length >= 5);
 
+/* ---- 5d. COALITION RESCUE: fragmented real regions survive, noise does not ---- */
+// The blue-eye regression: a thin peri-pupillary gold ring fragments across the
+// Lab grid into sub-5% clusters and used to be discarded entirely.
+const goldRing = extractMeasuredPalette(eyeCanvas({
+  irisHex: '#5a7fa0', ringHex: '#b89442', ringLo: 1.25, ringHi: 1.55, noise: 14,
+}));
+check('blue+gold-ring: extracts', goldRing.ok, goldRing.reason);
+const warmEntry = goldRing.ok && goldRing.palette.find((p) => p.lab[2] > 0);
+check('blue+gold-ring: a warm colour survives the 5% floor', !!warmEntry,
+  goldRing.ok ? goldRing.palette.map((p) => `${p.hex}(b*${p.lab[2]})`).join(' ') : goldRing.reason);
+check('blue+gold-ring: the warm colour sits inward of the blue field',
+  !!warmEntry && warmEntry.radialMean < 0.5, `radialMean=${warmEntry?.radialMean}`);
+// Same iris WITHOUT the ring must not invent a warm colour.
+const noRing = extractMeasuredPalette(eyeCanvas({ irisHex: '#5a7fa0', noise: 14 }));
+check('blue, no ring, same texture: no warm colour invented',
+  noRing.ok && !noRing.palette.some((p) => p.lab[2] > 0),
+  noRing.ok ? noRing.palette.map((p) => `${p.hex}(b*${p.lab[2]})`).join(' ') : noRing.reason);
+check('blue, no ring: still a single colour despite texture',
+  noRing.ok && noRing.palette.length === 1, noRing.ok ? `${noRing.palette.length}` : noRing.reason);
+// A lone reflection fragment has no partner and can never be rescued.
+const reflNoise = extractMeasuredPalette(eyeCanvas({
+  irisHex: '#7a5a32', reflection: REFLECTION, noise: 14,
+}));
+const cleanNoise = extractMeasuredPalette(eyeCanvas({ irisHex: '#7a5a32', noise: 14 }));
+check('textured brown + reflection: no alien colour rescued',
+  reflNoise.ok && cleanNoise.ok && reflNoise.palette.every((p) =>
+    cleanNoise.palette.some((c) => deltaE2000(p.lab, c.lab) <= 20)),
+  `clean=${paletteSig(cleanNoise)} refl=${paletteSig(reflNoise)}`);
+check('textured brown + reflection: rescue never fires on a lone artifact',
+  reflNoise.ok && reflNoise.diagnostics.rescued === 0,
+  `rescued=${reflNoise.ok ? reflNoise.diagnostics.rescued : 'n/a'}`);
+// Determinism of the rescue path.
+check('coalition rescue is deterministic',
+  JSON.stringify(extractMeasuredPalette(eyeCanvas({
+    irisHex: '#5a7fa0', ringHex: '#b89442', ringLo: 1.25, ringHi: 1.55, noise: 14,
+  }))) === JSON.stringify(goldRing));
+
 /* ---- 6. UNIFORM-EYE HONESTY ---- */
 const uniBrown = extractMeasuredPalette(eyeCanvas({ irisHex: '#7a5a32' }));
 check('uniform brown iris → exactly 1 colour', uniBrown.ok && uniBrown.palette.length === 1,
   uniBrown.ok ? `${uniBrown.palette.length}` : uniBrown.reason);
 const uniBlue = extractMeasuredPalette(eyeCanvas({ irisHex: '#5a7fa0' }));
 check('uniform blue iris → exactly 1 colour', uniBlue.ok && uniBlue.palette.length === 1);
+for (const [label, hex] of [['brown', '#7a5a32'], ['blue', '#5a7fa0'], ['green', '#4f7857']]) {
+  const r = extractMeasuredPalette(eyeCanvas({ irisHex: hex, noise: 14 }));
+  check(`uniform ${label} WITH texture → still exactly 1 colour (no manufactured diversity)`,
+    r.ok && r.palette.length === 1, r.ok ? `${r.palette.length}: ${paletteSig(r)}` : r.reason);
+}
 
 /* ---- 7. PERSONALIZATION (category must not determine the bracelet) ---- */
 const goldHazel = extractMeasuredPalette(eyeCanvas({
