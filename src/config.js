@@ -25,16 +25,20 @@ export const config = {
   beadCount: 24,
 
   // --- Commerce ---------------------------------------------------------
-  // Real checkout with NO backend and NO secret keys: create the product in
-  // Stripe, make a Payment Link per wrist size, and paste the URLs here.
-  // While links are empty, the button captures an email reservation instead.
-  // Docs: https://stripe.com/payments/payment-links
+  // Shopify headless checkout: the website captures the bead sequence and
+  // creates a Shopify order with it as custom line item properties. No backend
+  // needed; the Storefront API handles checkout directly.
   checkout: {
-    currency: '$',
+    currency: 'SEK',
     price: 49,
+    // Shopify Storefront API credentials (safe to expose; public access only)
+    shopify: {
+      storefrontToken: 'bb560265eaf48d43c7c2b412b5476edc',
+      graphqlEndpoint: 'https://87b9xq-f1.myshopify.com/api/2024-01/graphql.json',
+      productId: 'gid://shopify/Product/10873352061267', // EyeMatch Bracelet
+    },
+    // Legacy: Stripe Payment Links (keep for reference, not used)
     paymentLinks: { S: '', M: '', L: '' },
-    // Optional: POST reservations here (e.g. a Formspree endpoint). If empty,
-    // reservations are kept in localStorage and confirmed on screen.
     reserveEndpoint: '',
   },
   // The brand icon's inner opening is an 8-petal soft star — the iris

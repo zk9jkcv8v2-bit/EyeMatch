@@ -590,17 +590,90 @@ export function createFlow(ctx) {
 
   $('checkoutBtn').addEventListener('click', () => purchase());
 
-  /* ============ direct purchase — hand off to Stripe checkout ============ */
-  // No reservation, no waitlist: CHECKOUT opens the secure Stripe checkout for
-  // the configured piece(s). Paste Stripe Payment Link URLs into
-  // config.checkout.paymentLinks ({ S, M, L, and optional `set` }) to go live.
-  function purchase() {
-    const { paymentLinks } = config.checkout;
-    const link = state.set.length === 1
-      ? paymentLinks[state.set[0].size]
-      : (paymentLinks.set || paymentLinks[state.set[0].size]);
-    if (link) { window.location.href = link; return; }
-    console.warn('[EyeMatch] No Stripe Payment Link configured — set config.checkout.paymentLinks to enable checkout.');
+  /* ============ direct purchase — create Shopify order ============ */
+  // CHECKOUT creates a Shopify cart with the bead sequence stored as custom
+  // line item properties, then redirects to Shopify's secure checkout.
+  async function purchase() {
+    if (!state.current) return;
+
+    const { shopify } = config.checkout;
+    if (!shopify?.storefrontToken) {
+      console.warn('[EyeMatch] Shopify API not configured — set config.checkout.shopify credentials.');
+      return;
+    }
+
+    try {
+      $('checkoutBtn').disabled = true;
+      $('checkoutBtn').textContent = 'Creating order...';
+
+      // Build cart input with bead sequences for all bracelets in the set
+      const lines = state.set.map((member, idx) => {
+        const beadSequence = sequenceHexes(member.design).join(',');
+        return {
+          merchandiseId: shopify.productId, // variant GID
+          quantity: 1,
+          attributes: [
+            { key: 'Bead Sequence', value: beadSequence },
+            { key: 'Pattern', value: member.pattern },
+            { key: 'Size', value: member.size },
+            { key: 'Stone Name', value: member.classification.stone },
+            { key: 'Design ID', value: member.design.designId },
+            { key: 'Bracelet #', value: `${idx + 1} of ${state.set.length}` },
+          ],
+        };
+      });
+
+      // GraphQL mutation to create cart
+      const query = `
+        mutation CreateCart($input: CartInput!) {
+          cartCreate(input: $input) {
+            cart {
+              id
+              checkoutUrl
+            }
+          }
+        }
+      `;
+
+      const response = await fetch(shopify.graphqlEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Storefront-Access-Token': shopify.storefrontToken,
+        },
+        body: JSON.stringify({
+          query,
+          variables: {
+            input: { lines },
+          },
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.errors) {
+        console.error('[EyeMatch] Shopify API error:', result.errors);
+        alert('Error creating order. Please try again.');
+        $('checkoutBtn').disabled = false;
+        $('checkoutBtn').textContent = 'Checkout';
+        return;
+      }
+
+      const checkoutUrl = result.data?.cartCreate?.cart?.checkoutUrl;
+      if (checkoutUrl) {
+        window.location.href = checkoutUrl;
+      } else {
+        console.error('[EyeMatch] No checkout URL returned:', result.data);
+        alert('Error: Could not create checkout. Please try again.');
+        $('checkoutBtn').disabled = false;
+        $('checkoutBtn').textContent = 'Checkout';
+      }
+    } catch (err) {
+      console.error('[EyeMatch] Purchase error:', err);
+      alert('Error processing order. Please try again.');
+      $('checkoutBtn').disabled = false;
+      $('checkoutBtn').textContent = 'Checkout';
+    }
   }
 
   // Dev hooks: build an order quickly without a camera. Input is a hex, an
