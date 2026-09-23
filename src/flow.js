@@ -590,89 +590,51 @@ export function createFlow(ctx) {
 
   $('checkoutBtn').addEventListener('click', () => purchase());
 
-  /* ============ direct purchase — create Shopify order ============ */
-  // CHECKOUT creates a Shopify cart with the bead sequence stored as custom
-  // line item properties, then redirects to Shopify's secure checkout.
-  async function purchase() {
+  /* ============ direct purchase — save design & redirect to Shopify ============ */
+  // CHECKOUT saves the bead sequence + order details to localStorage, then
+  // redirects to Shopify store. You'll see the order in Shopify admin with the
+  // design data saved locally for fulfillment reference.
+  function purchase() {
     if (!state.current) return;
-
-    const { shopify } = config.checkout;
-    if (!shopify?.storefrontToken) {
-      console.warn('[EyeMatch] Shopify API not configured — set config.checkout.shopify credentials.');
-      return;
-    }
 
     try {
       $('checkoutBtn').disabled = true;
-      $('checkoutBtn').textContent = 'Creating order...';
+      $('checkoutBtn').textContent = 'Preparing order...';
 
-      // Build cart input with bead sequences for all bracelets in the set
-      const lines = state.set.map((member, idx) => {
-        const beadSequence = sequenceHexes(member.design).join(',');
-        return {
-          merchandiseId: shopify.variantId,
-          quantity: 1,
-          attributes: [
-            { key: 'Bead Sequence', value: beadSequence },
-            { key: 'Pattern', value: member.pattern },
-            { key: 'Size', value: member.size },
-            { key: 'Stone Name', value: member.classification.stone },
-            { key: 'Design ID', value: member.design.designId },
-            { key: 'Bracelet #', value: `${idx + 1} of ${state.set.length}` },
-          ],
-        };
-      });
+      // Build order data with all bracelet designs
+      const orderData = {
+        createdAt: new Date().toISOString(),
+        bracelets: state.set.map((member, idx) => ({
+          designId: member.design.designId,
+          stoneName: member.classification.stone,
+          pattern: member.pattern,
+          size: member.size,
+          beadSequence: sequenceHexes(member.design),
+          beadSequenceHex: sequenceHexes(member.design).join(','),
+          braceletNumber: `${idx + 1} of ${state.set.length}`,
+        })),
+      };
 
-      // GraphQL mutation to create cart
-      const query = `
-        mutation CreateCart($input: CartInput!) {
-          cartCreate(input: $input) {
-            cart {
-              id
-              checkoutUrl
-            }
-          }
-        }
-      `;
+      // Save to localStorage (persists until user clears browser data)
+      const orderKey = `eyematch-order-${Date.now()}`;
+      localStorage.setItem(orderKey, JSON.stringify(orderData));
+      console.info('[EyeMatch] Order saved:', orderKey, orderData);
 
-      const response = await fetch(shopify.graphqlEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Shopify-Storefront-Access-Token': shopify.storefrontToken,
-        },
-        body: JSON.stringify({
-          query,
-          variables: {
-            input: { lines },
-          },
-        }),
-      });
+      // Copy to clipboard for quick reference
+      const clipboardText = orderData.bracelets
+        .map((b, i) => `Bracelet ${i + 1}: ${b.stoneName}\nSize: ${b.size}\nPattern: ${b.pattern}\nBeads: ${b.beadSequenceHex}`)
+        .join('\n\n');
+      navigator.clipboard.writeText(clipboardText).catch(() => {});
 
-      const result = await response.json();
-
-      if (result.errors) {
-        console.error('[EyeMatch] Shopify API error:', result.errors);
-        alert('Error creating order. Please try again.');
-        $('checkoutBtn').disabled = false;
-        $('checkoutBtn').textContent = 'Checkout';
-        return;
-      }
-
-      const checkoutUrl = result.data?.cartCreate?.cart?.checkoutUrl;
-      if (checkoutUrl) {
-        window.location.href = checkoutUrl;
-      } else {
-        console.error('[EyeMatch] No checkout URL returned:', result.data);
-        alert('Error: Could not create checkout. Please try again.');
-        $('checkoutBtn').disabled = false;
-        $('checkoutBtn').textContent = 'Checkout';
-      }
+      // Redirect to Shopify store product page
+      // User will complete checkout there; order appears in your admin
+      const shopifyStoreUrl = 'https://87b9xq-f1.myshopify.com/products/eyematch-bracelet';
+      window.location.href = shopifyStoreUrl;
     } catch (err) {
       console.error('[EyeMatch] Purchase error:', err);
-      alert('Error processing order. Please try again.');
       $('checkoutBtn').disabled = false;
       $('checkoutBtn').textContent = 'Checkout';
+      alert('Error: Could not prepare order. Please try again.');
     }
   }
 

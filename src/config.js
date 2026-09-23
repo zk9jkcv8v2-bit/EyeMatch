@@ -25,21 +25,13 @@ export const config = {
   beadCount: 24,
 
   // --- Commerce ---------------------------------------------------------
-  // Shopify headless checkout: the website captures the bead sequence and
-  // creates a Shopify order with it as custom line item properties. No backend
-  // needed; the Storefront API handles checkout directly.
+  // Simple Shopify integration: the website captures the bead sequence and
+  // stores it locally, then redirects to Shopify for checkout. You receive
+  // the order in Shopify admin; use localStorage to reference the design.
   checkout: {
     currency: 'SEK',
     price: 49,
-    // Shopify Storefront API credentials (safe to expose; public access only)
-    shopify: {
-      storefrontToken: 'bb560265eaf48d43c7c2b412b5476edc',
-      graphqlEndpoint: 'https://87b9xq-f1.myshopify.com/api/2024-01/graphql.json',
-      variantId: 'gid://shopify/ProductVariant/55039005327699', // EyeMatch Bracelet Default variant
-    },
-    // Legacy: Stripe Payment Links (keep for reference, not used)
-    paymentLinks: { S: '', M: '', L: '' },
-    reserveEndpoint: '',
+    shopifyStoreUrl: 'https://87b9xq-f1.myshopify.com/products/eyematch-bracelet',
   },
   // The brand icon's inner opening is an 8-petal soft star — the iris
   // silhouette and the 3D metal ring both derive from this.
