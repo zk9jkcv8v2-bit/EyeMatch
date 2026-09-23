@@ -35,7 +35,7 @@ export const config = {
     shopify: {
       storefrontToken: 'bb560265eaf48d43c7c2b412b5476edc',
       graphqlEndpoint: 'https://87b9xq-f1.myshopify.com/api/2024-01/graphql.json',
-      productId: 'gid://shopify/Product/10873352061267', // EyeMatch Bracelet
+      variantId: 'gid://shopify/ProductVariant/55039005327699', // EyeMatch Bracelet Default variant
     },
     // Legacy: Stripe Payment Links (keep for reference, not used)
     paymentLinks: { S: '', M: '', L: '' },

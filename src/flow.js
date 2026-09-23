@@ -610,7 +610,7 @@ export function createFlow(ctx) {
       const lines = state.set.map((member, idx) => {
         const beadSequence = sequenceHexes(member.design).join(',');
         return {
-          merchandiseId: shopify.productId, // variant GID
+          merchandiseId: shopify.variantId,
           quantity: 1,
           attributes: [
             { key: 'Bead Sequence', value: beadSequence },
